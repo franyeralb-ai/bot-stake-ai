@@ -217,6 +217,27 @@ def init_db():
             )
         """)
         c.execute("INSERT OR IGNORE INTO account (key, val) VALUES ('equity', ?)", (INITIAL_BALANCE,))
+        # Reparar artefactos históricos de sets empatados (1-1 en Tenis / 2-2 en Ping Pong) al cerrarse el último punto en Kambi
+        c.execute("""
+            UPDATE ai_observations
+            SET status = 'WON',
+                target_win = 1,
+                hypothetical_roi = ROUND(odds - 1.0, 4),
+                final_h = CASE WHEN side = 'HOME' THEN final_h + 1 ELSE final_h END,
+                final_a = CASE WHEN side = 'AWAY' THEN final_a + 1 ELSE final_a END,
+                final_score = CASE
+                    WHEN side = 'HOME' THEN CAST(final_h + 1 AS TEXT) || '-' || CAST(final_a AS TEXT)
+                    ELSE CAST(final_h AS TEXT) || '-' || CAST(final_a + 1 AS TEXT)
+                END
+            WHERE sport_slug != 'soccer'
+              AND status = 'LOST'
+              AND final_h = final_a
+              AND (
+                  (side = 'HOME' AND current_period_h > current_period_a)
+                  OR (side = 'AWAY' AND current_period_a > current_period_h)
+                  OR odds <= 1.05
+              )
+        """)
         conn.commit()
         conn.close()
 
@@ -942,7 +963,10 @@ def evaluate_fixture_safety(
 
     # ==================== 6. VOLEIBOL / TENIS DE MESA / BÉISBOL ====================
     else:
-        pts_diff = abs(cur_h - cur_a)
+        sets_won = h_score if leader_side == "HOME" else a_score
+        cur_leader_pts = cur_h if leader_side == "HOME" else cur_a
+        cur_trailer_pts = cur_a if leader_side == "HOME" else cur_h
+        pts_lead = cur_leader_pts - cur_trailer_pts
         for mkt in markets:
             m_low = mkt["name"].lower()
             ovr = mkt["overround"]
@@ -951,16 +975,18 @@ def evaluate_fixture_safety(
                     if is_team_match(leader_team, out["name"], leader_side):
                         odds = out["odds"]
                         if sport_slug == "volleyball":
-                            lock_ok = (diff >= 2 and max(cur_h, cur_a) >= 18 and pts_diff >= 4)
+                            # Calibrado con CSV IA (100% WR): el líder del partido (2+ sets) también debe ir ganando el set actual (18+ pts, ventaja +4)
+                            lock_ok = (sets_won >= 2 and diff >= 1 and cur_leader_pts >= 18 and pts_lead >= 4)
                         elif sport_slug == "table-tennis":
-                            lock_ok = (diff >= 2 and max(cur_h, cur_a) >= 8 and pts_diff >= 4)
+                            # Calibrado con CSV IA (42G / 0P = 100% WR): 2 sets ganados + liderando el set actual con >=8 pts y ventaja >=3 pts
+                            lock_ok = (sets_won >= 2 and diff >= 1 and cur_leader_pts >= 8 and pts_lead >= 3)
                         else:
                             lock_ok = diff >= 3 and any(k in status_lower for k in ["8th", "9th"])
                         add_candidate(
-                            "Match Winner", f"WINNER_{leader_side}", 0.0, float(diff),
-                            out["name"], leader_side, odds, ovr, lock_ok, 93,
-                            f"{sport_label} Winner | {remaining_text} | Ventaja dominante",
-                            f"Winner @{odds:.2f} (Esp. cierre dominante)",
+                            "Match Winner", f"WINNER_{leader_side}", 0.0, float(max(diff, pts_lead)),
+                            out["name"], leader_side, odds, ovr, lock_ok, 94,
+                            f"{sport_label} Winner | {remaining_text} | Sets {h_score}-{a_score} [{cur_h}-{cur_a}]",
+                            f"Winner @{odds:.2f} (Sets {h_score}-{a_score}, Pts {cur_h}-{cur_a} | Req: 2 sets + cierre dominante)",
                             "WAIT_CLOSING_LEAD"
                         )
 

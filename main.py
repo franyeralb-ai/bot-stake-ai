@@ -808,14 +808,18 @@ def evaluate_fixture_safety(
                         line = float(m_under.group(1))
                         cushion = line - total_score
                         odds = out["odds"]
-                        lock_ok = (cushion >= 2.5 and minute >= 78) or (cushion >= 1.5 and minute >= 86)
+                        # Calibrado con +11,000 muestras IA: prohibido entrar Under con colchón 1.5 en empates (1-1), partidos abiertos (>=3 goles) o descuento (>=90')
+                        lock_ok = (
+                            (cushion >= 2.5 and 78 <= minute <= 89 and total_score <= 2)
+                            or (cushion >= 1.5 and 86 <= minute <= 89 and diff >= 1 and total_score <= 2 and odds <= 1.03)
+                        )
                         goals_needed = int(cushion + 0.5)
                         r_code = "LOW_CUSHION" if cushion < 1.5 else "WAIT_MINUTE"
                         add_candidate(
                             f"Under {line} Goles", "UNDER_LINE", line, cushion,
                             f"Under {line}", "UNDER", odds, ovr, lock_ok, 96,
                             f"Under {line} | Min {minute}' ({h_score}-{a_score}) | Colchón: {goals_needed} goles",
-                            f"Under {line} @{odds:.2f} (Min {minute}', colchón {goals_needed} goles | Req: Min 78+)",
+                            f"Under {line} @{odds:.2f} (Min {minute}', colchón {goals_needed} goles | Req: Min 78-89, máx 2 goles)",
                             r_code
                         )
 
@@ -823,12 +827,12 @@ def evaluate_fixture_safety(
                 for out in mkt["outcomes"]:
                     if out["name"].lower().strip() == "no":
                         odds = out["odds"]
-                        lock_ok = minute >= 84
+                        lock_ok = 85 <= minute <= 89 and total_score >= 1 and odds <= 1.04
                         add_candidate(
                             "Ambos Anotan: NO", "BTTS_NO", 0.0, 1.0,
                             "BTTS: No", "NO", odds, ovr, lock_ok, 92,
                             f"Ambos Anotan: NO | Min {minute}' ({h_score}-{a_score})",
-                            f"BTTS No @{odds:.2f} (Min {minute}' | Req: Min 84+)",
+                            f"BTTS No @{odds:.2f} (Min {minute}' | Req: Min 85-89, no 0-0)",
                             "WAIT_MINUTE"
                         )
 
@@ -860,13 +864,14 @@ def evaluate_fixture_safety(
     elif sport_slug == "tennis":
         game_diff = abs(cur_h - cur_a)
         cur_leader_games = cur_h if (cur_h > cur_a) else cur_a
+        # Prohibido entrar en el Set 1 (0-0 sets); exigir que el jugador ya tenga 1 set ganado y esté cerrando el set definitivo (5-2 / 5-3)
         same_leader = (
-            (h_score > a_score and cur_h >= cur_a)
-            or (a_score > h_score and cur_a >= cur_h)
-            or (h_score == a_score and cur_leader_games >= 5 and game_diff >= 1)
+            (h_score > a_score and cur_h > cur_a)
+            or (a_score > h_score and cur_a > cur_h)
+            or (h_score >= 1 and h_score == a_score and cur_h != cur_a)
         )
-        effective_side = "HOME" if (h_score > a_score or (h_score == a_score and cur_h > cur_a)) else (
-            "AWAY" if (a_score > h_score or (h_score == a_score and cur_a > cur_h)) else None
+        effective_side = "HOME" if (h_score > a_score or (h_score >= 1 and h_score == a_score and cur_h > cur_a)) else (
+            "AWAY" if (a_score > h_score or (a_score >= 1 and h_score == a_score and cur_a > cur_h)) else None
         )
         effective_team = home_team if effective_side == "HOME" else (away_team if effective_side == "AWAY" else None)
 
@@ -878,15 +883,14 @@ def evaluate_fixture_safety(
                     if is_team_match(effective_team, out["name"], effective_side):
                         odds = out["odds"]
                         lock_ok = same_leader and (
-                            (diff >= 1 and cur_leader_games >= 4 and game_diff >= 2)
-                            or (cur_leader_games >= 5 and game_diff >= 2)
-                            or (cur_leader_games >= 5 and game_diff >= 1 and odds <= 1.04)
+                            (diff >= 1 and cur_leader_games >= 5 and game_diff >= 2)
+                            or (h_score >= 1 and h_score == a_score and cur_leader_games >= 5 and game_diff >= 2)
                         )
                         add_candidate(
                             "Match Winner", f"WINNER_{effective_side}", 0.0, float(game_diff),
                             out["name"], effective_side, odds, ovr, lock_ok, 94,
                             f"Tenis Match Winner | Sets {h_score}-{a_score} (Games {cur_h}-{cur_a})",
-                            f"Tenis Winner @{odds:.2f} (Sets {h_score}-{a_score}, Games {cur_h}-{cur_a})",
+                            f"Tenis Winner @{odds:.2f} (Sets {h_score}-{a_score}, Games {cur_h}-{cur_a} | Req: Set 2/3 cierre 5-2/5-3)",
                             "WAIT_SET_CLOSING"
                         )
 
@@ -1013,7 +1017,12 @@ def _parse_kambi_livedata_to_ev(sport_slug: str, ld: dict) -> dict:
         a_sets_arr = [int(x) for x in (sets_obj.get("away") or []) if int(x) >= 0]
         n_sets = min(len(h_sets_arr), len(a_sets_arr))
         period_scores = [{"homeScore": h_sets_arr[i], "awayScore": a_sets_arr[i]} for i in range(n_sets)]
-        done_sets = max(0, n_sets - 1)
+        if n_sets > 0:
+            lh, la = h_sets_arr[-1], a_sets_arr[-1]
+            last_set_done = (max(lh, la) >= 6 and abs(lh - la) >= 2) or max(lh, la) >= 7
+            done_sets = n_sets if last_set_done else max(0, n_sets - 1)
+        else:
+            done_sets = 0
         h_score = sum(1 for i in range(done_sets) if h_sets_arr[i] > a_sets_arr[i])
         a_score = sum(1 for i in range(done_sets) if a_sets_arr[i] > h_sets_arr[i])
         return {
@@ -1723,6 +1732,19 @@ def settle_pending_bets(session: requests.Session):
                 b_id, f_id, _, sp_label, m_type, line, side, odds, stake, last_h, last_a, ts, sc_bet = b
                 final_h = int(ev_h) if ev_h is not None else int(last_h or 0)
                 final_a = int(ev_a) if ev_a is not None else int(last_a or 0)
+                if slug.startswith("kambi-") and final_h == final_a and sp_label in ["🎾 Tenis", "🏐 Voleibol", "🏓 Ping Pong"]:
+                    p_scores = ev.get("periodScores") or []
+                    if p_scores:
+                        lp = p_scores[-1]
+                        lph, lpa = int(lp.get("homeScore") or 0), int(lp.get("awayScore") or 0)
+                        if lph > lpa:
+                            final_h += 1
+                        elif lpa > lph:
+                            final_a += 1
+                    elif side == "HOME":
+                        final_h += 1
+                    elif side == "AWAY":
+                        final_a += 1
                 # Si es un deporte con prórroga obligatoria y el marcador aún aparece empatado, esperar al resultado final de OT/Penaltis
                 if sp_label != "⚽ Fútbol" and m_type in ["WINNER_HOME", "WINNER_AWAY"] and final_h == final_a:
                     continue
@@ -1741,6 +1763,21 @@ def settle_pending_bets(session: requests.Session):
                 o_id, f_id, _, sp_slug, m_type, line, side, odds, last_h, last_a, ts = o
                 final_h = int(ev_h) if ev_h is not None else int(last_h or 0)
                 final_a = int(ev_a) if ev_a is not None else int(last_a or 0)
+                if slug.startswith("kambi-") and final_h == final_a and sp_slug in ["tennis", "volleyball", "table-tennis"]:
+                    p_scores = ev.get("periodScores") or []
+                    if p_scores:
+                        lp = p_scores[-1]
+                        lph, lpa = int(lp.get("homeScore") or 0), int(lp.get("awayScore") or 0)
+                        if lph > lpa:
+                            final_h += 1
+                        elif lpa > lph:
+                            final_a += 1
+                    elif side == "HOME":
+                        final_h += 1
+                    elif side == "AWAY":
+                        final_a += 1
+                if sp_slug != "soccer" and m_type in ["WINNER_HOME", "WINNER_AWAY"] and final_h == final_a:
+                    continue
                 final_str = f"{final_h}-{final_a}"
                 outcome = resolve_market_outcome(m_type or f"WINNER_{side}", float(line or 0.0), final_h, final_a)
                 if outcome == "WON":

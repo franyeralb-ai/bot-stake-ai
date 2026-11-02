@@ -904,7 +904,7 @@ def evaluate_fixture_safety(
                     if is_team_match(effective_team, out["name"], effective_side):
                         odds = out["odds"]
                         lock_ok = same_leader and (
-                            (diff >= 1 and cur_leader_games >= 5 and game_diff >= 2)
+                            (diff >= 1 and cur_leader_games >= 4 and game_diff >= 2)
                             or (h_score >= 1 and h_score == a_score and cur_leader_games >= 5 and game_diff >= 2)
                         )
                         add_candidate(

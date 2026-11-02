@@ -27,6 +27,10 @@ SCAN_INTERVAL_SEC = 6      # Escaneo rápido cada 6 segundos
 STAKE_GQL_URL = os.environ.get("STAKE_GQL_URL", "https://stake.com/_api/graphql")
 PROXY_URL = os.environ.get("PROXY_URL", "")
 RENDER_EXTERNAL_URL = os.environ.get("RENDER_EXTERNAL_URL", "")
+CLOUD_BRIDGE_URL = os.environ.get("CLOUD_BRIDGE_URL", "https://bot-stake-ai.onrender.com").strip()
+KAMBI_LIVE_OPEN_URL = "https://eu-offering-api.kambicdn.com/offering/v2018/ub/event/live/open.json?lang=en_GB&market=GB"
+KAMBI_EVENT_BO_URL = "https://eu-offering-api.kambicdn.com/offering/v2018/ub/betoffer/event/{event_id}.json?lang=en_GB&market=GB"
+KAMBI_EVENT_LIVEDATA_URL = "https://eu-offering-api.kambicdn.com/offering/v2018/ub/event/{event_id}/livedata.json?lang=en_GB&market=GB"
 DB_NAME = os.environ.get("DB_NAME", "stake_paper_30k.db")
 DB_LOCK = threading.RLock()
 
@@ -46,19 +50,33 @@ SPORTS_CONFIG = [
     {"slug": "baseball", "label": "⚾ Béisbol", "limit": 15},
 ]
 
+KAMBI_SPORT_MAP = {
+    "FOOTBALL": "soccer",
+    "TENNIS": "tennis",
+    "BASKETBALL": "basketball",
+    "ICE_HOCKEY": "ice-hockey",
+    "AMERICAN_FOOTBALL": "american-football",
+    "VOLLEYBALL": "volleyball",
+    "TABLE_TENNIS": "table-tennis",
+    "BASEBALL": "baseball",
+}
+
 runtime_state = {
     "is_running": True,
     "stake_amount": DEFAULT_STAKE,
     "min_odds": DEFAULT_MIN_ODDS,
     "max_odds": DEFAULT_MAX_ODDS,
     "last_scan_time": "Iniciando...",
-    "connection_status": "Conectando a Stake Multi-Sport GraphQL...",
+    "connection_status": "Conectando a Motor Multi-Deporte en Vivo...",
     "live_radar": [],
     "sport_counts": {},
     "active_live_slugs": set(),
     "last_settle_check": {},
     "stoppage_start": {},
-    "score_memory": {}
+    "score_memory": {},
+    "stake_blocked_until": 0,
+    "bridge_data": None,
+    "recent_settled_map": {}
 }
 
 # ==================== BASE DE DATOS (WAL + TELEMETRÍA IA) ====================
@@ -984,44 +1002,239 @@ def evaluate_fixture_safety(
         "ai_candidates": ai_candidates
     }
 
-def scan_live_matches(session: requests.Session):
-    headers = {
-        "Content-Type": "application/json",
-        "Origin": "https://stake.com",
-        "Referer": "https://stake.com/sports/live"
-    }
+def _parse_kambi_livedata_to_ev(sport_slug: str, ld: dict) -> dict:
+    score = ld.get("score") or {}
+    mc = ld.get("matchClock") or {}
+    stats = ld.get("statistics") or {}
+    sets_obj = stats.get("sets") or {}
 
+    if sport_slug == "tennis":
+        h_sets_arr = [int(x) for x in (sets_obj.get("home") or []) if int(x) >= 0]
+        a_sets_arr = [int(x) for x in (sets_obj.get("away") or []) if int(x) >= 0]
+        n_sets = min(len(h_sets_arr), len(a_sets_arr))
+        period_scores = [{"homeScore": h_sets_arr[i], "awayScore": a_sets_arr[i]} for i in range(n_sets)]
+        done_sets = max(0, n_sets - 1)
+        h_score = sum(1 for i in range(done_sets) if h_sets_arr[i] > a_sets_arr[i])
+        a_score = sum(1 for i in range(done_sets) if a_sets_arr[i] > h_sets_arr[i])
+        return {
+            "homeScore": h_score,
+            "awayScore": a_score,
+            "matchStatus": f"Set {max(1, n_sets)}",
+            "homeGameScore": score.get("home"),
+            "awayGameScore": score.get("away"),
+            "clock": {"matchTime": None, "remainingTime": None},
+            "periodScores": period_scores
+        }
+
+    elif sport_slug in ["volleyball", "table-tennis"]:
+        h_sets_arr = [int(x) for x in (sets_obj.get("home") or []) if int(x) >= 0]
+        a_sets_arr = [int(x) for x in (sets_obj.get("away") or []) if int(x) >= 0]
+        n_sets = min(len(h_sets_arr), len(a_sets_arr))
+        period_scores = [{"homeScore": h_sets_arr[i], "awayScore": a_sets_arr[i]} for i in range(n_sets)]
+        h_score = sum(1 for i in range(n_sets) if h_sets_arr[i] > a_sets_arr[i])
+        a_score = sum(1 for i in range(n_sets) if a_sets_arr[i] > h_sets_arr[i])
+        cur_pts_h = int(score.get("home") or 0) if str(score.get("home") or "").isdigit() else 0
+        cur_pts_a = int(score.get("away") or 0) if str(score.get("away") or "").isdigit() else 0
+        period_scores.append({"homeScore": cur_pts_h, "awayScore": cur_pts_a})
+        return {
+            "homeScore": h_score,
+            "awayScore": a_score,
+            "matchStatus": f"Set {n_sets + 1}",
+            "homeGameScore": None,
+            "awayGameScore": None,
+            "clock": {"matchTime": None, "remainingTime": None},
+            "periodScores": period_scores
+        }
+
+    else:
+        h_raw = str(score.get("home") or "0")
+        a_raw = str(score.get("away") or "0")
+        h_score = int(h_raw) if h_raw.lstrip("-").isdigit() else 0
+        a_score = int(a_raw) if a_raw.lstrip("-").isdigit() else 0
+        minute = mc.get("minute")
+        second = mc.get("second")
+        match_time = f"{int(minute):02d}:{int(second or 0):02d}" if minute is not None else None
+        rem_m = mc.get("minutesLeftInPeriod")
+        rem_s = mc.get("secondsLeftInMinute")
+        rem_time = f"{int(rem_m):02d}:{int(rem_s or 0):02d}" if rem_m is not None else None
+        period_str = str(mc.get("period") or mc.get("periodId") or "En vivo")
+        return {
+            "homeScore": h_score,
+            "awayScore": a_score,
+            "matchStatus": period_str,
+            "homeGameScore": None,
+            "awayGameScore": None,
+            "clock": {"matchTime": match_time, "remainingTime": rem_time},
+            "periodScores": []
+        }
+
+def _convert_kambi_betoffer_to_market(bo: dict, home_name: str, away_name: str) -> Optional[dict]:
+    if not bo:
+        return None
+    crit = bo.get("criterion") or {}
+    cl = str(crit.get("englishLabel") or crit.get("label") or "").strip()
+    cl_low = cl.lower()
+
+    if cl_low in ["full time", "match odds - regular time", "regular time"]:
+        m_name = "1x2"
+    elif cl_low in ["match odds", "moneyline"]:
+        m_name = "Winner"
+    elif "moneyline" in cl_low and "overtime" in cl_low:
+        m_name = "Winner (Incl. Overtime)"
+    elif cl_low in ["draw no bet", "draw no bet - regular time"]:
+        m_name = "Draw No Bet"
+    elif cl_low in ["double chance", "double chance - regular time"]:
+        m_name = "Double Chance"
+    elif cl_low in ["total goals", "total goals - regular time"]:
+        m_name = "Total"
+    elif cl_low in ["both teams to score", "both teams to score - regular time"]:
+        m_name = "Both Teams to Score"
+    else:
+        return None
+
+    outcomes = []
+    for o in bo.get("outcomes") or []:
+        if o.get("status") != "OPEN" or o.get("odds") is None:
+            continue
+        odds_val = round(float(o["odds"]) / 1000.0, 3)
+        if odds_val <= 1.0:
+            continue
+        raw_lbl = str(o.get("englishLabel") or o.get("label") or o.get("participant") or "").strip()
+        if m_name in ["1x2", "Draw No Bet", "Winner", "Winner (Incl. Overtime)"]:
+            if raw_lbl == "1":
+                out_name = home_name
+            elif raw_lbl == "2":
+                out_name = away_name
+            elif raw_lbl.upper() == "X":
+                out_name = "Draw"
+            else:
+                out_name = raw_lbl
+        elif m_name == "Double Chance":
+            if raw_lbl.upper() == "1X":
+                out_name = f"{home_name} or Draw"
+            elif raw_lbl.upper() == "X2":
+                out_name = f"Draw or {away_name}"
+            elif raw_lbl.upper() == "12":
+                out_name = f"{home_name} or {away_name}"
+            else:
+                out_name = raw_lbl
+        elif m_name == "Total":
+            line_raw = o.get("line")
+            if line_raw is None:
+                continue
+            line_f = float(line_raw) / 1000.0
+            out_name = f"{raw_lbl} {line_f:.1f}"
+        else:
+            out_name = raw_lbl
+
+        outcomes.append({"name": out_name, "odds": odds_val, "active": True})
+
+    if not outcomes:
+        return None
+    return {"name": m_name, "status": "active", "outcomes": outcomes}
+
+def fetch_kambi_cloud_fixtures(session: requests.Session) -> List[Tuple[dict, list]]:
+    res = session.get(KAMBI_LIVE_OPEN_URL, impersonate="chrome124", timeout=10)
+    if res.status_code != 200:
+        return []
+    live_events = (res.json() or {}).get("liveEvents") or []
+    by_slug: Dict[str, list] = {sp["slug"]: [] for sp in SPORTS_CONFIG}
+
+    late_event_ids = []
+    parsed_items = []
+    for item in live_events:
+        ev_info = item.get("event") or {}
+        if ev_info.get("state") != "STARTED":
+            continue
+        k_sport = str(ev_info.get("sport") or "").upper()
+        sp_slug = KAMBI_SPORT_MAP.get(k_sport)
+        if not sp_slug:
+            continue
+        eid = ev_info.get("id")
+        home_name = str(ev_info.get("homeName") or "Local").strip()
+        away_name = str(ev_info.get("awayName") or "Visitante").strip()
+        ld = item.get("liveData") or {}
+        mc = ld.get("matchClock") or {}
+        minute = int(mc.get("minute") or 0)
+        period_id = str(mc.get("periodId") or "").upper()
+
+        if (sp_slug == "soccer" and minute >= 65) or (sp_slug == "ice-hockey" and "PERIOD3" in period_id):
+            late_event_ids.append(eid)
+        parsed_items.append((sp_slug, eid, ev_info, ld, item.get("mainBetOffer"), home_name, away_name))
+
+    extra_markets_map: Dict[Any, List[dict]] = {}
+    for eid in late_event_ids[:10]:
+        try:
+            r_bo = session.get(KAMBI_EVENT_BO_URL.format(event_id=eid), impersonate="chrome124", timeout=5)
+            if r_bo.status_code == 200:
+                extra_markets_map[eid] = (r_bo.json() or {}).get("betOffers") or []
+        except Exception:
+            pass
+
+    for sp_slug, eid, ev_info, ld, main_bo, home_name, away_name in parsed_items:
+        path = ev_info.get("path") or []
+        cat_name = path[1].get("englishName", "") if len(path) > 1 else str(ev_info.get("sport") or "")
+        t_name = str(ev_info.get("group") or "")
+        ev_status = _parse_kambi_livedata_to_ev(sp_slug, ld)
+
+        mkts = []
+        if eid in extra_markets_map:
+            for bo in extra_markets_map[eid]:
+                m_conv = _convert_kambi_betoffer_to_market(bo, home_name, away_name)
+                if m_conv:
+                    mkts.append(m_conv)
+        if main_bo:
+            m_main = _convert_kambi_betoffer_to_market(main_bo, home_name, away_name)
+            if m_main:
+                mkts.append(m_main)
+
+        fixture_obj = {
+            "id": f"kambi_{eid}",
+            "slug": f"kambi-{eid}",
+            "status": "live",
+            "tournament": {"name": t_name, "category": {"name": cat_name}},
+            "data": {"competitors": [{"name": home_name}, {"name": away_name}]},
+            "eventStatus": ev_status,
+            "groups": [{"name": "Main", "templates": [{"name": "Main", "markets": mkts}]}]
+        }
+        by_slug[sp_slug].append(fixture_obj)
+
+    result = []
+    for sp in SPORTS_CONFIG:
+        f_list = by_slug.get(sp["slug"], [])[:sp["limit"]]
+        result.append((sp, f_list))
+    return result
+
+def push_bridge_to_cloud(session: requests.Session, fetched_sports: List[Tuple[dict, list]]):
+    if RENDER_EXTERNAL_URL or not CLOUD_BRIDGE_URL:
+        return
+    try:
+        payload = {
+            "ts": int(time.time()),
+            "fetched_sports": [{"sport": sp, "fixtures": f_list} for sp, f_list in fetched_sports],
+            "settled_map": runtime_state.get("recent_settled_map", {})
+        }
+        session.post(
+            f"{CLOUD_BRIDGE_URL.rstrip('/')}/api/bridge_push",
+            json=payload,
+            timeout=6
+        )
+    except Exception:
+        pass
+
+def process_fetched_sports(fetched_sports: List[Tuple[dict, list]], source_label: str):
     all_radar = []
     sport_counts = {}
     total_live = 0
-    errors = 0
     live_slugs = set()
 
     min_odds = runtime_state["min_odds"]
     max_odds = runtime_state["max_odds"]
 
-    # Fase 1: Obtener todos los datos HTTP en memoria (0 conexiones SQLite abiertas)
-    fetched_sports = []
-    for sp in SPORTS_CONFIG:
-        payload = {
-            "operationName": "LiveSportFixtures",
-            "variables": {"sportSlug": sp["slug"], "limit": sp["limit"]},
-            "query": LIVE_SPORT_QUERY
-        }
-        try:
-            res = session.post(STAKE_GQL_URL, json=payload, headers=headers, impersonate="chrome124", timeout=10)
-            if res.status_code != 200:
-                errors += 1
-                continue
-            fixtures = ((res.json().get("data") or {}).get("slugSport") or {}).get("fixtureList") or []
-            fetched_sports.append((sp, fixtures))
-            sport_counts[sp["label"]] = len(fixtures)
-            total_live += len(fixtures)
-        except Exception:
-            errors += 1
-            continue
+    for sp, fixtures in fetched_sports:
+        sport_counts[sp["label"]] = len(fixtures)
+        total_live += len(fixtures)
 
-    # Fase 2: Evaluar en memoria
     bet_live_updates = []
     obs_live_updates = []
     potential_bets = []
@@ -1159,7 +1372,6 @@ def scan_live_matches(session: requests.Session):
 
     runtime_state["active_live_slugs"] = live_slugs
 
-    # Fase 3: Transacción SQLite ultrarrápida (< 5ms)
     with DB_LOCK:
         conn = get_db()
         try:
@@ -1261,10 +1473,67 @@ def scan_live_matches(session: requests.Session):
     runtime_state["live_radar"] = all_radar[:80]
     runtime_state["sport_counts"] = sport_counts
     runtime_state["last_scan_time"] = time.strftime("%H:%M:%S")
-    if total_live > 0 or errors == 0:
-        runtime_state["connection_status"] = f"Conectado a Stake GraphQL ({total_live} eventos en vivo en {len(SPORTS_CONFIG)} deportes)"
-    else:
-        runtime_state["connection_status"] = "Reconectando con Stake GraphQL..."
+    runtime_state["connection_status"] = f"Conectado a {source_label} ({total_live} eventos en vivo en {len(SPORTS_CONFIG)} deportes)"
+
+def scan_live_matches(session: requests.Session):
+    now_ts = int(time.time())
+    headers = {
+        "Content-Type": "application/json",
+        "Origin": "https://stake.com",
+        "Referer": "https://stake.com/sports/live"
+    }
+
+    # 1. Si hay datos frescos del Bridge Stake GraphQL (< 25s), usarlos prioritariamente en la nube
+    bridge = runtime_state.get("bridge_data")
+    if bridge and (now_ts - int(bridge.get("ts") or 0) <= 25):
+        raw_list = bridge.get("fetched_sports") or []
+        fetched_sports = [(item["sport"], item["fixtures"]) for item in raw_list if "sport" in item and "fixtures" in item]
+        if fetched_sports:
+            process_fetched_sports(fetched_sports, "Stake GraphQL (Bridge en Vivo)")
+            return
+
+    # 2. Intentar Stake GraphQL directo (si no está en cooldown por bloqueo de IP de datacenter)
+    fetched_sports = []
+    stake_ok = False
+    if now_ts >= runtime_state.get("stake_blocked_until", 0):
+        for idx, sp in enumerate(SPORTS_CONFIG):
+            payload = {
+                "operationName": "LiveSportFixtures",
+                "variables": {"sportSlug": sp["slug"], "limit": sp["limit"]},
+                "query": LIVE_SPORT_QUERY
+            }
+            try:
+                res = session.post(STAKE_GQL_URL, json=payload, headers=headers, impersonate="chrome124", timeout=8)
+                if res.status_code != 200:
+                    if idx == 0 and res.status_code in [403, 429, 503]:
+                        # IP de datacenter bloqueada por Cloudflare en stake.com -> activar motor Cloud 24/7 sin demora
+                        runtime_state["stake_blocked_until"] = now_ts + 120
+                        break
+                    continue
+                fixtures = ((res.json().get("data") or {}).get("slugSport") or {}).get("fixtureList") or []
+                fetched_sports.append((sp, fixtures))
+                stake_ok = True
+            except Exception:
+                if idx == 0:
+                    runtime_state["stake_blocked_until"] = now_ts + 60
+                    break
+                continue
+
+    if stake_ok and fetched_sports:
+        process_fetched_sports(fetched_sports, "Stake GraphQL")
+        push_bridge_to_cloud(session, fetched_sports)
+        return
+
+    # 3. Motor Cloud 24/7 (Kambi Live Sportsbook CDN) — funciona 100% en Render sin bloqueos Cloudflare
+    try:
+        cloud_sports = fetch_kambi_cloud_fixtures(session)
+        if cloud_sports:
+            process_fetched_sports(cloud_sports, "Motor Multi-Deporte Cloud 24/7")
+            return
+    except Exception:
+        pass
+
+    runtime_state["connection_status"] = "Reconectando con Motor Multi-Deporte..."
 
 def resolve_market_outcome(market_type: str, line: float, final_h: int, final_a: int) -> str:
     if market_type == "WINNER_HOME":
@@ -1370,15 +1639,57 @@ def settle_pending_bets(session: requests.Session):
     selected_slugs = [x[2] for x in slugs_to_query[:18]]
 
     headers = {"Content-Type": "application/json", "Origin": "https://stake.com"}
+    settled_map = runtime_state.get("recent_settled_map", {})
 
     for slug in selected_slugs:
         last_check[slug] = now_ts
-        payload = {"operationName": "SlugFixtureResult", "variables": {"slug": slug}, "query": SLUG_FIXTURE_QUERY}
         try:
-            res = session.post(STAKE_GQL_URL, json=payload, headers=headers, impersonate="chrome124", timeout=10)
-            if res.status_code != 200:
-                continue
-            data = (res.json().get("data") or {}).get("slugFixture")
+            data = None
+            if slug in settled_map:
+                data = settled_map[slug]
+            elif slug.startswith("kambi-"):
+                eid = slug.replace("kambi-", "")
+                # Determinar el sport_slug para parsear sets o goles
+                sample_sp_slug = "soccer"
+                if slug in real_bets_by_slug:
+                    sample_sp_slug = infer_sport_slug_from_label(real_bets_by_slug[slug][0][3] or "⚽ Fútbol")
+                elif slug in obs_by_slug:
+                    sample_sp_slug = obs_by_slug[slug][0][3] or "soccer"
+
+                r_live = session.get(KAMBI_EVENT_LIVEDATA_URL.format(event_id=eid), impersonate="chrome124", timeout=6)
+                r_bo = session.get(KAMBI_EVENT_BO_URL.format(event_id=eid), impersonate="chrome124", timeout=6)
+
+                if r_live.status_code == 404 and slug not in live_slugs:
+                    # El partido ya terminó y salió del buffer en vivo de Kambi; liquidar con último marcador conocido
+                    data = {"status": "ended", "eventStatus": {"homeScore": None, "awayScore": None, "matchStatus": "ended"}}
+                elif r_live.status_code == 200:
+                    ld = (r_live.json() or {}).get("liveData") or {}
+                    ev_k = _parse_kambi_livedata_to_ev(sample_sp_slug, ld)
+                    is_k_done = False
+                    if r_bo.status_code == 404 and slug not in live_slugs:
+                        is_k_done = True
+                    elif r_bo.status_code == 200:
+                        bo_json = r_bo.json() or {}
+                        evs_arr = bo_json.get("events") or []
+                        ev_state = str(evs_arr[0].get("state") or "") if evs_arr else ""
+                        bos_arr = bo_json.get("betOffers") or []
+                        if ev_state == "FINISHED" or (slug not in live_slugs and len(bos_arr) == 0):
+                            is_k_done = True
+                    data = {
+                        "status": "ended" if is_k_done else "live",
+                        "eventStatus": ev_k
+                    }
+            else:
+                if now_ts < runtime_state.get("stake_blocked_until", 0):
+                    continue
+                payload = {"operationName": "SlugFixtureResult", "variables": {"slug": slug}, "query": SLUG_FIXTURE_QUERY}
+                res = session.post(STAKE_GQL_URL, json=payload, headers=headers, impersonate="chrome124", timeout=8)
+                if res.status_code != 200:
+                    if res.status_code in [403, 429, 503]:
+                        runtime_state["stake_blocked_until"] = now_ts + 90
+                    continue
+                data = (res.json().get("data") or {}).get("slugFixture")
+
             if not data:
                 continue
 
@@ -1387,6 +1698,8 @@ def settle_pending_bets(session: requests.Session):
             fixture_status = str(data.get("status") or "").lower()
 
             is_finished = fixture_status in ["ended", "closed", "settled"]
+            if is_finished and not slug.startswith("kambi-"):
+                settled_map[slug] = data
 
             ev_h = ev.get("homeScore")
             ev_a = ev.get("awayScore")
@@ -1690,6 +2003,21 @@ def api_simulate_test():
             conn.commit()
         finally:
             conn.close()
+    return {"status": "ok"}
+
+class BridgePayload(BaseModel):
+    ts: int
+    fetched_sports: List[Dict[str, Any]]
+    settled_map: Optional[Dict[str, Any]] = None
+
+@app.post("/api/bridge_push")
+def api_bridge_push(payload: BridgePayload):
+    runtime_state["bridge_data"] = {
+        "ts": int(time.time()),
+        "fetched_sports": payload.fetched_sports
+    }
+    if payload.settled_map:
+        runtime_state["recent_settled_map"].update(payload.settled_map)
     return {"status": "ok"}
 
 @app.post("/api/reset")

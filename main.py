@@ -848,19 +848,21 @@ def evaluate_fixture_safety(
                 for out in mkt["outcomes"]:
                     if out["name"].lower().strip() == "no":
                         odds = out["odds"]
-                        lock_ok = 85 <= minute <= 89 and total_score >= 1 and odds <= 1.04
+                        # Regla Anti-Muerte Súbita de 1 Gol: BTTS: No se guarda solo en modo sombra para IA
+                        # porque 1 solo gol (ej. 0-1 -> 1-1) hace perder -500 USDT, mientras que DNB devuelve y 1X/X2 gana.
+                        lock_ok = False
                         add_candidate(
                             "Ambos Anotan: NO", "BTTS_NO", 0.0, 1.0,
-                            "BTTS: No", "NO", odds, ovr, lock_ok, 92,
+                            "BTTS: No", "NO", odds, ovr, lock_ok, 80,
                             f"Ambos Anotan: NO | Min {minute}' ({h_score}-{a_score})",
-                            f"BTTS No @{odds:.2f} (Min {minute}' | Req: Min 85-89, no 0-0)",
-                            "WAIT_MINUTE"
+                            f"BTTS No @{odds:.2f} (Solo Sombra IA: riesgo de muerte súbita por 1 gol)",
+                            "SINGLE_GOAL_RISK"
                         )
 
     # ==================== 2. BALONCESTO (BASKETBALL) ====================
     elif sport_slug == "basketball":
         is_q4 = any(k in status_lower for k in ["4th", "q4", "overtime", "ot"])
-        is_q3 = any(k in status_lower for k in ["3rd", "q3"])
+        rem_s = timing["rem_seconds"]
         for mkt in markets:
             m_low = mkt["name"].lower()
             ovr = mkt["overround"]
@@ -868,16 +870,17 @@ def evaluate_fixture_safety(
                 for out in mkt["outcomes"]:
                     if is_team_match(leader_team, out["name"], leader_side):
                         odds = out["odds"]
-                        lock_ok = (
-                            (is_q4 and diff >= 12 and (rem_min is not None and rem_min <= 4 or minute >= 36))
-                            or (is_q4 and diff >= 16)
-                            or (is_q3 and diff >= 24)
+                        # Exigir tiempo restante real en el 4to cuarto (<=3:00 min con +12 pts, <=5:00 min con +18 pts, o +24 pts en Q4)
+                        lock_ok = is_q4 and (
+                            (diff >= 12 and 0 <= rem_s <= 180)
+                            or (diff >= 18 and 0 <= rem_s <= 300)
+                            or (diff >= 24)
                         )
                         add_candidate(
                             "Winner (Incl. OT)", f"WINNER_{leader_side}", 0.0, float(diff),
                             out["name"], leader_side, odds, ovr, lock_ok, 95,
                             f"Basket Winner | {remaining_text} | Ventaja +{diff} pts",
-                            f"Basket Winner @{odds:.2f} (+{diff} pts | Req: Q4 +12/+16 pts)",
+                            f"Basket Winner @{odds:.2f} (+{diff} pts | Req: Q4 <=3:00m +12 pts o <=5:00m +18 pts)",
                             "WAIT_Q4_MARGIN"
                         )
 

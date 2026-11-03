@@ -238,6 +238,26 @@ def init_db():
                   OR odds <= 1.05
               )
         """)
+        # Reparar liquidación prematura de Zhang, Boxiong vs Linang Xiao (donde Stake envió 0-1 en el segundo de transición antes de actualizar a 2-1 [2-6, 7-6, 6-2])
+        c.execute("""
+            SELECT id, stake, odds, pnl FROM bets
+            WHERE match_name LIKE '%Zhang, Boxiong%' AND status = 'LOST' AND final_score = '0-1'
+        """)
+        for z_id, z_stake, z_odds, z_old_pnl in c.fetchall():
+            new_pnl = round(float(z_stake) * (float(z_odds) - 1.0), 2)
+            diff_pnl = round(new_pnl - float(z_old_pnl), 2)
+            c.execute("UPDATE account SET val = val + ? WHERE key = 'equity'", (diff_pnl,))
+            c.execute("""
+                UPDATE bets
+                SET status = 'WON', pnl = ?, final_score = '2-1', last_h = 2, last_a = 1
+                WHERE id = ?
+            """, (new_pnl, z_id))
+        c.execute("""
+            UPDATE ai_observations
+            SET status = 'WON', target_win = 1, hypothetical_roi = ROUND(odds - 1.0, 4),
+                final_h = 2, final_a = 1, final_score = '2-1'
+            WHERE match_name LIKE '%Zhang, Boxiong%' AND side = 'HOME' AND status = 'LOST' AND final_score = '0-1'
+        """)
         conn.commit()
         conn.close()
 
@@ -486,12 +506,16 @@ def compute_live_timing(sport_slug: str, ev: dict, fid: str = "") -> Dict[str, A
     match_time = clock_obj.get("matchTime")
     rem_time = clock_obj.get("remainingTime")
     periods = ev.get("periodScores") or []
-    cur_p = periods[-1] if periods else {}
-    cur_h = int(cur_p.get("homeScore") or 0)
-    cur_a = int(cur_p.get("awayScore") or 0)
-
     is_paused_break = any(k in status_lower for k in ["halftime", "half time", "break", "intermission", "pause", "suspended"])
     is_overtime = any(k in status_lower for k in ["awaiting extra", "overtime", "extra time", "penalties", "shootout", "ot", "ap"])
+
+    if sport_slug in ["tennis", "volleyball", "table-tennis"]:
+        has_active_set = (len(periods) > (h_score + a_score)) and (not is_paused_break)
+    else:
+        has_active_set = bool(periods)
+    cur_p = periods[-1] if (periods and has_active_set) else {}
+    cur_h = int(cur_p.get("homeScore") or 0)
+    cur_a = int(cur_p.get("awayScore") or 0)
 
     rem_sec = parse_mmss_to_seconds(rem_time)
     elap_sec = parse_mmss_to_seconds(match_time)
@@ -725,7 +749,12 @@ def evaluate_fixture_safety(
     match_status = str(ev.get("matchStatus") or "").strip()
     status_lower = match_status.lower()
     periods = ev.get("periodScores") or []
-    cur_p = periods[-1] if periods else {}
+    is_paused_break = any(k in status_lower for k in ["halftime", "half time", "break", "intermission", "pause", "suspended"])
+    if sport_slug in ["tennis", "volleyball", "table-tennis"]:
+        has_active_set = (len(periods) > (h_score + a_score)) and (not is_paused_break)
+    else:
+        has_active_set = bool(periods)
+    cur_p = periods[-1] if (periods and has_active_set) else {}
     cur_h = int(cur_p.get("homeScore") or 0)
     cur_a = int(cur_p.get("awayScore") or 0)
 
@@ -906,15 +935,16 @@ def evaluate_fixture_safety(
                 for out in mkt["outcomes"]:
                     if is_team_match(effective_team, out["name"], effective_side):
                         odds = out["odds"]
-                        lock_ok = same_leader and (
-                            (diff >= 1 and cur_leader_games >= 4 and game_diff >= 2)
+                        # Calibrado con dataset nocturno: bloquear 4-2 (un solo quiebre con 2 games por jugar); exigir 5-2/5-3/5-1/5-0 o doble quiebre 4-1/4-0
+                        lock_ok = has_active_set and same_leader and (
+                            (diff >= 1 and ((cur_leader_games >= 5 and game_diff >= 2) or (cur_leader_games >= 4 and game_diff >= 3)))
                             or (h_score >= 1 and h_score == a_score and cur_leader_games >= 5 and game_diff >= 2)
                         )
                         add_candidate(
                             "Match Winner", f"WINNER_{effective_side}", 0.0, float(game_diff),
                             out["name"], effective_side, odds, ovr, lock_ok, 94,
                             f"Tenis Match Winner | Sets {h_score}-{a_score} (Games {cur_h}-{cur_a})",
-                            f"Tenis Winner @{odds:.2f} (Sets {h_score}-{a_score}, Games {cur_h}-{cur_a} | Req: Set 2/3 cierre 5-2/5-3)",
+                            f"Tenis Winner @{odds:.2f} (Sets {h_score}-{a_score}, Games {cur_h}-{cur_a} | Req: Set 2/3 cierre 5-2/5-3 o 4-1)",
                             "WAIT_SET_CLOSING"
                         )
 
@@ -978,11 +1008,11 @@ def evaluate_fixture_safety(
                     if is_team_match(leader_team, out["name"], leader_side):
                         odds = out["odds"]
                         if sport_slug == "volleyball":
-                            # Calibrado con CSV IA (100% WR): el líder del partido (2+ sets) también debe ir ganando el set actual (18+ pts, ventaja +4)
-                            lock_ok = (sets_won >= 2 and diff >= 1 and cur_leader_pts >= 18 and pts_lead >= 4)
+                            # Calibrado con CSV IA (100% WR): el líder del partido (2+ sets) también debe ir ganando el set actual EN JUEGO (18+ pts, ventaja +4)
+                            lock_ok = has_active_set and (sets_won >= 2 and diff >= 1 and cur_leader_pts >= 18 and pts_lead >= 4)
                         elif sport_slug == "table-tennis":
-                            # Calibrado con CSV IA (42G / 0P = 100% WR): 2 sets ganados + liderando el set actual con >=8 pts y ventaja >=3 pts
-                            lock_ok = (sets_won >= 2 and diff >= 1 and cur_leader_pts >= 8 and pts_lead >= 3)
+                            # Calibrado con CSV IA (100% WR): 2 sets ganados + liderando el set actual EN JUEGO con >=8 pts y ventaja >=3 pts (bloquea descansos Second break)
+                            lock_ok = has_active_set and (sets_won >= 2 and diff >= 1 and cur_leader_pts >= 8 and pts_lead >= 3)
                         else:
                             lock_ok = diff >= 3 and any(k in status_lower for k in ["8th", "9th"])
                         add_candidate(
@@ -1417,18 +1447,28 @@ def process_fetched_sports(fetched_sports: List[Tuple[dict, list]], source_label
             if bet_live_updates:
                 c.executemany("""
                     UPDATE bets
-                    SET last_h = ?, last_a = ?, final_score = ?,
+                    SET last_h = CASE WHEN (? + ?) >= (last_h + last_a) THEN ? ELSE last_h END,
+                        last_a = CASE WHEN (? + ?) >= (last_h + last_a) THEN ? ELSE last_a END,
+                        final_score = ?,
                         live_clock = ?, remaining_text = ?, rem_seconds = ?,
                         elapsed_seconds = ?, clock_updated_at = ?
                     WHERE fixture_id = ? AND status = 'PENDING'
-                """, bet_live_updates)
+                """, [
+                    (u[0], u[1], u[0], u[0], u[1], u[1], u[2], u[3], u[4], u[5], u[6], u[7], u[8])
+                    for u in bet_live_updates
+                ])
             if obs_live_updates:
                 c.executemany("""
                     UPDATE ai_observations
-                    SET last_h = ?, last_a = ?, final_score = ?,
+                    SET last_h = CASE WHEN (? + ?) >= (last_h + last_a) THEN ? ELSE last_h END,
+                        last_a = CASE WHEN (? + ?) >= (last_h + last_a) THEN ? ELSE last_a END,
+                        final_score = ?,
                         remaining_text = ?, rem_seconds = ?
                     WHERE fixture_id = ? AND status = 'PENDING'
-                """, obs_live_updates)
+                """, [
+                    (u[0], u[1], u[0], u[0], u[1], u[1], u[2], u[3], u[4], u[5])
+                    for u in obs_live_updates
+                ])
 
             for pb in potential_bets:
                 c.execute("SELECT id FROM bets WHERE fixture_id = ?", (pb["fid"],))
@@ -1606,6 +1646,19 @@ def infer_sport_slug_from_label(label: str) -> str:
             return sp["slug"]
     return "soccer"
 
+def _extract_set_counts_from_periods(periods: list) -> Tuple[int, int]:
+    """Cuenta los sets ganados por Local y Visitante a partir de periodScores (evita el bug 0-0 de Stake al finalizar Tenis/Voleibol/Ping Pong)."""
+    p_h = 0
+    p_a = 0
+    for p in (periods or []):
+        ph = int(p.get("homeScore") or 0)
+        pa = int(p.get("awayScore") or 0)
+        if ph > pa:
+            p_h += 1
+        elif pa > ph:
+            p_a += 1
+    return p_h, p_a
+
 def settle_pending_bets(session: requests.Session):
     with DB_LOCK:
         conn = get_db()
@@ -1736,11 +1789,9 @@ def settle_pending_bets(session: requests.Session):
             fixture_status = str(data.get("status") or "").lower()
 
             is_finished = fixture_status in ["ended", "closed", "settled"]
-            if is_finished and not slug.startswith("kambi-"):
-                settled_map[slug] = data
-
             ev_h = ev.get("homeScore")
             ev_a = ev.get("awayScore")
+            p_h, p_a = _extract_set_counts_from_periods(ev.get("periodScores") or [])
 
             if not is_finished:
                 # Actualizar el reloj restante en vivo de las apuestas activas aunque no estén en top fixtures
@@ -1748,8 +1799,12 @@ def settle_pending_bets(session: requests.Session):
                     b_id, f_id, _, sp_label, m_type, line, side, odds, stake, last_h, last_a, ts, sc_bet = b
                     sp_slug = infer_sport_slug_from_label(sp_label or "⚽ Fútbol")
                     tm = compute_live_timing(sp_slug, ev, f_id)
-                    cur_h = int(ev_h) if ev_h is not None else int(last_h or 0)
-                    cur_a = int(ev_a) if ev_a is not None else int(last_a or 0)
+                    raw_h = int(ev_h) if ev_h is not None else int(last_h or 0)
+                    raw_a = int(ev_a) if ev_a is not None else int(last_a or 0)
+                    if (raw_h + raw_a) < (int(last_h or 0) + int(last_a or 0)):
+                        cur_h, cur_a = int(last_h or 0), int(last_a or 0)
+                    else:
+                        cur_h, cur_a = raw_h, raw_a
                     in_play_bet_clock_updates.append((
                         cur_h, cur_a, f"{tm['score_display']} (En vivo)",
                         tm["clock_display"], tm["remaining_text"],
@@ -1757,25 +1812,37 @@ def settle_pending_bets(session: requests.Session):
                     ))
                 continue
 
+            can_cache_settled = True
             for b in real_bets_by_slug.get(slug, []):
                 b_id, f_id, _, sp_label, m_type, line, side, odds, stake, last_h, last_a, ts, sc_bet = b
-                final_h = int(ev_h) if ev_h is not None else int(last_h or 0)
-                final_a = int(ev_a) if ev_a is not None else int(last_a or 0)
-                if slug.startswith("kambi-") and final_h == final_a and sp_label in ["🎾 Tenis", "🏐 Voleibol", "🏓 Ping Pong"]:
-                    p_scores = ev.get("periodScores") or []
-                    if p_scores:
-                        lp = p_scores[-1]
-                        lph, lpa = int(lp.get("homeScore") or 0), int(lp.get("awayScore") or 0)
-                        if lph > lpa:
+                raw_h = int(ev_h) if ev_h is not None else int(last_h or 0)
+                raw_a = int(ev_a) if ev_a is not None else int(last_a or 0)
+                final_h = raw_h if (raw_h + raw_a) >= (int(last_h or 0) + int(last_a or 0)) else int(last_h or 0)
+                final_a = raw_a if (raw_h + raw_a) >= (int(last_h or 0) + int(last_a or 0)) else int(last_a or 0)
+
+                if sp_label in ["🎾 Tenis", "🏐 Voleibol", "🏓 Ping Pong"]:
+                    if (p_h + p_a) >= (final_h + final_a) and p_h != p_a:
+                        final_h, final_a = p_h, p_a
+                    elif slug.startswith("kambi-") and final_h == final_a:
+                        p_scores = ev.get("periodScores") or []
+                        if p_scores:
+                            lp = p_scores[-1]
+                            lph, lpa = int(lp.get("homeScore") or 0), int(lp.get("awayScore") or 0)
+                            if lph > lpa:
+                                final_h += 1
+                            elif lpa > lph:
+                                final_a += 1
+                        elif side == "HOME":
                             final_h += 1
-                        elif lpa > lph:
+                        elif side == "AWAY":
                             final_a += 1
-                    elif side == "HOME":
-                        final_h += 1
-                    elif side == "AWAY":
-                        final_a += 1
+                    # Evitar liquidar en el segundo de transición donde Stake aún no subió el 2do/3er set ganador (< 2 sets)
+                    if max(final_h, final_a) < 2 and (now_ts - ts) < 7200:
+                        can_cache_settled = False
+                        continue
                 # Si es un deporte con prórroga obligatoria y el marcador aún aparece empatado, esperar al resultado final de OT/Penaltis
                 if sp_label != "⚽ Fútbol" and m_type in ["WINNER_HOME", "WINNER_AWAY"] and final_h == final_a:
+                    can_cache_settled = False
                     continue
                 suffix = " (OT)" if match_status in ["aet", "ap", "overtime", "penalties"] else ""
                 final_str = f"{final_h}-{final_a}{suffix}"
@@ -1790,22 +1857,32 @@ def settle_pending_bets(session: requests.Session):
 
             for o in obs_by_slug.get(slug, []):
                 o_id, f_id, _, sp_slug, m_type, line, side, odds, last_h, last_a, ts = o
-                final_h = int(ev_h) if ev_h is not None else int(last_h or 0)
-                final_a = int(ev_a) if ev_a is not None else int(last_a or 0)
-                if slug.startswith("kambi-") and final_h == final_a and sp_slug in ["tennis", "volleyball", "table-tennis"]:
-                    p_scores = ev.get("periodScores") or []
-                    if p_scores:
-                        lp = p_scores[-1]
-                        lph, lpa = int(lp.get("homeScore") or 0), int(lp.get("awayScore") or 0)
-                        if lph > lpa:
+                raw_h = int(ev_h) if ev_h is not None else int(last_h or 0)
+                raw_a = int(ev_a) if ev_a is not None else int(last_a or 0)
+                final_h = raw_h if (raw_h + raw_a) >= (int(last_h or 0) + int(last_a or 0)) else int(last_h or 0)
+                final_a = raw_a if (raw_h + raw_a) >= (int(last_h or 0) + int(last_a or 0)) else int(last_a or 0)
+
+                if sp_slug in ["tennis", "volleyball", "table-tennis"]:
+                    if (p_h + p_a) >= (final_h + final_a) and p_h != p_a:
+                        final_h, final_a = p_h, p_a
+                    elif slug.startswith("kambi-") and final_h == final_a:
+                        p_scores = ev.get("periodScores") or []
+                        if p_scores:
+                            lp = p_scores[-1]
+                            lph, lpa = int(lp.get("homeScore") or 0), int(lp.get("awayScore") or 0)
+                            if lph > lpa:
+                                final_h += 1
+                            elif lpa > lph:
+                                final_a += 1
+                        elif side == "HOME":
                             final_h += 1
-                        elif lpa > lph:
+                        elif side == "AWAY":
                             final_a += 1
-                    elif side == "HOME":
-                        final_h += 1
-                    elif side == "AWAY":
-                        final_a += 1
+                    if max(final_h, final_a) < 2 and (now_ts - ts) < 7200:
+                        can_cache_settled = False
+                        continue
                 if sp_slug != "soccer" and m_type in ["WINNER_HOME", "WINNER_AWAY"] and final_h == final_a:
+                    can_cache_settled = False
                     continue
                 final_str = f"{final_h}-{final_a}"
                 outcome = resolve_market_outcome(m_type or f"WINNER_{side}", float(line or 0.0), final_h, final_a)
@@ -1819,6 +1896,9 @@ def settle_pending_bets(session: requests.Session):
                     target_win = 0
                     roi = -1.0
                 obs_settlements.append((outcome, target_win, roi, final_h, final_a, final_str, now_ts, o_id))
+
+            if is_finished and can_cache_settled and not slug.startswith("kambi-"):
+                settled_map[slug] = data
 
         except Exception:
             pass

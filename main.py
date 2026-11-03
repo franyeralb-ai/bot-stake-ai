@@ -827,12 +827,12 @@ def evaluate_fixture_safety(
                 for out in mkt["outcomes"]:
                     if is_team_match(leader_team, out["name"], leader_side):
                         odds = out["odds"]
-                        lock_ok = (diff >= 2 and minute >= 74) or (diff == 1 and minute >= 82 and odds <= 1.04)
+                        lock_ok = (diff >= 2 and minute >= 75) or (diff == 1 and minute >= 85 and total_score <= 2 and odds <= 1.04)
                         add_candidate(
                             "Sin Empate (DNB)", f"DNB_{leader_side}", 0.0, float(diff),
                             f"{out['name']} (DNB)", leader_side, odds, ovr, lock_ok, 98,
                             f"Sin Empate (DNB) | Min {minute}' | +{diff} gol(es)",
-                            f"DNB @{odds:.2f} (Min {minute}', +{diff} gol | Req: Min 74+ con +2 o 82+ con +1)",
+                            f"DNB @{odds:.2f} (Min {minute}', +{diff} gol | Req: Min 75+ con +2 o 85+ con 1-0/0-1)",
                             "WAIT_MINUTE"
                         )
 
@@ -841,13 +841,14 @@ def evaluate_fixture_safety(
                     o_low = out["name"].lower()
                     if "draw" in o_low and leader_team.lower() in o_low:
                         odds = out["odds"]
-                        lock_ok = (diff >= 1 and minute >= 80) or (diff >= 2 and minute >= 68)
+                        # Con +1 gol exigir min 85+, cuota <=1.04 y partido cerrado (1-0/0-1, máx 2 goles) para evitar remontadas 1-2 -> 3-2
+                        lock_ok = (diff >= 2 and minute >= 75) or (diff == 1 and minute >= 85 and total_score <= 2 and odds <= 1.04)
                         dc_type = "DC_1X" if leader_side == "HOME" else "DC_X2"
                         add_candidate(
                             "Doble Oportunidad", dc_type, 0.0, float(diff + 1),
                             out["name"], leader_side, odds, ovr, lock_ok, 99,
                             f"Doble Oportunidad (Cubre empate) | Min {minute}' | +{diff} gol(es)",
-                            f"Doble Oportunidad @{odds:.2f} (Min {minute}', +{diff} gol | Req: Min 80+ con +1 o 68+ con +2)",
+                            f"Doble Oportunidad @{odds:.2f} (Min {minute}', +{diff} gol | Req: Min 85+ con 1-0/0-1 o 75+ con +2)",
                             "WAIT_MINUTE"
                         )
 
@@ -961,16 +962,16 @@ def evaluate_fixture_safety(
                     if is_team_match(leader_team, out["name"], leader_side) and "&" not in out["name"]:
                         odds = out["odds"]
                         # PROHIBIDO entrar con +1 gol en Hockey (por el 6v5 sin portero al final).
-                        # Solo +3 goles (últimos 12 min) o +2 goles con <= 3:30 restantes y Prórroga Incluida.
+                        # Con +2 goles exigir reloj real <= 2:00 restantes (120s) y Prórroga Incluida; o +3 goles en últimos 8 min.
                         lock_ok = is_p3 and (
-                            (diff >= 3 and (minute >= 48 or (rem_min is not None and rem_min <= 12)))
-                            or (diff >= 2 and is_ot_included and (minute >= 56 or (0 <= rem_s <= 210)))
+                            (diff >= 3 and (minute >= 52 or (0 <= rem_s <= 480)))
+                            or (diff >= 2 and is_ot_included and (0 <= rem_s <= 120))
                         )
                         add_candidate(
                             mkt["name"], f"WINNER_{leader_side}", 0.0, float(diff),
                             out["name"], leader_side, odds, ovr, lock_ok, 97 if is_ot_included else 92,
                             f"Hockey Winner | {remaining_text} | Ventaja +{diff} goles",
-                            f"Hockey Winner @{odds:.2f} (+{diff} gol | Req: +3 goles o +2 goles <=3:30m Incl. OT)",
+                            f"Hockey Winner @{odds:.2f} (+{diff} gol | Req: +3 goles <=8:00m o +2 goles <=2:00m Incl. OT)",
                             "WAIT_P3_MARGIN"
                         )
 

@@ -936,16 +936,18 @@ def evaluate_fixture_safety(
                 for out in mkt["outcomes"]:
                     if is_team_match(effective_team, out["name"], effective_side):
                         odds = out["odds"]
-                        # Calibrado con dataset nocturno: bloquear 4-2 (un solo quiebre con 2 games por jugar); exigir 5-2/5-3/5-1/5-0 o doble quiebre 4-1/4-0
+                        # Calibrado con +16,000 muestras IA:
+                        # - En Set 2 (1-0 sets, doble colchón): exigir 5-2/5-3/5-1/5-0 o doble quiebre 4-1/4-0 (26G / 0P = 100% WR)
+                        # - En Set 3 (1-1 sets, muerte súbita sin colchón): bloquear 5-3 y 5-2 (1 solo break); exigir doble quiebre 5-1 o 5-0
                         lock_ok = has_active_set and same_leader and (
                             (diff >= 1 and ((cur_leader_games >= 5 and game_diff >= 2) or (cur_leader_games >= 4 and game_diff >= 3)))
-                            or (h_score >= 1 and h_score == a_score and cur_leader_games >= 5 and game_diff >= 2)
+                            or (h_score >= 1 and h_score == a_score and cur_leader_games >= 5 and game_diff >= 4)
                         )
                         add_candidate(
                             "Match Winner", f"WINNER_{effective_side}", 0.0, float(game_diff),
                             out["name"], effective_side, odds, ovr, lock_ok, 94,
                             f"Tenis Match Winner | Sets {h_score}-{a_score} (Games {cur_h}-{cur_a})",
-                            f"Tenis Winner @{odds:.2f} (Sets {h_score}-{a_score}, Games {cur_h}-{cur_a} | Req: Set 2/3 cierre 5-2/5-3 o 4-1)",
+                            f"Tenis Winner @{odds:.2f} (Sets {h_score}-{a_score}, Games {cur_h}-{cur_a} | Req: 1-0 sets + 5-2/4-1 o Set 3 5-1/5-0)",
                             "WAIT_SET_CLOSING"
                         )
 

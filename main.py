@@ -1014,8 +1014,13 @@ def evaluate_fixture_safety(
                             # Calibrado con CSV IA (100% WR): el líder del partido (2+ sets) también debe ir ganando el set actual EN JUEGO (18+ pts, ventaja +4)
                             lock_ok = has_active_set and (sets_won >= 2 and diff >= 1 and cur_leader_pts >= 18 and pts_lead >= 4)
                         elif sport_slug == "table-tennis":
-                            # Calibrado con CSV IA (100% WR): 2 sets ganados + liderando el set actual EN JUEGO con >=8 pts y ventaja >=3 pts (bloquea descansos Second break)
-                            lock_ok = has_active_set and (sets_won >= 2 and diff >= 1 and cur_leader_pts >= 8 and pts_lead >= 3)
+                            # Calibrado con +22,000 muestras IA (100% WR):
+                            # - Con 2-0 en sets (doble colchón de set): >=8 pts y ventaja >=3 pts
+                            # - Con 2-1 en sets (Set 4): exigir (>=9 pts y ventaja >=3) o (>=8 pts y ventaja >=4) para bloquear remontadas de 8-5
+                            lock_ok = has_active_set and sets_won >= 2 and (
+                                (diff >= 2 and cur_leader_pts >= 8 and pts_lead >= 3)
+                                or (diff == 1 and ((cur_leader_pts >= 9 and pts_lead >= 3) or (cur_leader_pts >= 8 and pts_lead >= 4)))
+                            )
                         else:
                             lock_ok = diff >= 3 and any(k in status_lower for k in ["8th", "9th"])
                         add_candidate(

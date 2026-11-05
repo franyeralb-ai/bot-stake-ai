@@ -1011,8 +1011,13 @@ def evaluate_fixture_safety(
                     if is_team_match(leader_team, out["name"], leader_side):
                         odds = out["odds"]
                         if sport_slug == "volleyball":
-                            # Calibrado con CSV IA (100% WR): el líder del partido (2+ sets) también debe ir ganando el set actual EN JUEGO (18+ pts, ventaja +4)
-                            lock_ok = has_active_set and (sets_won >= 2 and diff >= 1 and cur_leader_pts >= 18 and pts_lead >= 4)
+                            # Calibrado con +27,000 muestras IA (100% WR):
+                            # - Con 2-0 en sets (doble colchón de set): >=18 pts y ventaja >=4 pts
+                            # - Con 2-1 en sets (Set 4): exigir (>=21 pts y ventaja >=4) o (>=19 pts y ventaja >=6) para evitar remontadas de 18-14
+                            lock_ok = has_active_set and sets_won >= 2 and (
+                                (diff >= 2 and cur_leader_pts >= 18 and pts_lead >= 4)
+                                or (diff == 1 and ((cur_leader_pts >= 21 and pts_lead >= 4) or (cur_leader_pts >= 19 and pts_lead >= 6)))
+                            )
                         elif sport_slug == "table-tennis":
                             # Calibrado con +22,000 muestras IA (100% WR):
                             # - Con 2-0 en sets (doble colchón de set): >=8 pts y ventaja >=3 pts

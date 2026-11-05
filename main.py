@@ -258,6 +258,25 @@ def init_db():
                 final_h = 2, final_a = 1, final_score = '2-1'
             WHERE match_name LIKE '%Zhang, Boxiong%' AND side = 'HOME' AND status = 'LOST' AND final_score = '0-1'
         """)
+        # Reparar partido retirado en el 3er set [6-7, 7-5, 2-1 games] (Hurrion, Millen vs Zhao, Lingxi -> PUSH / Void 0.00 USDT)
+        c.execute("""
+            SELECT id, pnl FROM bets
+            WHERE match_name LIKE '%Hurrion, Millen%' AND status = 'LOST'
+        """)
+        for h_id, h_old_pnl in c.fetchall():
+            diff_pnl = round(0.0 - float(h_old_pnl), 2)
+            c.execute("UPDATE account SET val = val + ? WHERE key = 'equity'", (diff_pnl,))
+            c.execute("""
+                UPDATE bets
+                SET status = 'PUSH', pnl = 0.0, final_score = '1-1 (Ret.)', last_h = 1, last_a = 1
+                WHERE id = ?
+            """, (h_id,))
+        c.execute("""
+            UPDATE ai_observations
+            SET status = 'PUSH', target_win = NULL, hypothetical_roi = 0.0,
+                final_h = 1, final_a = 1, final_score = '1-1 (Ret.)'
+            WHERE match_name LIKE '%Hurrion, Millen%' AND status = 'LOST'
+        """)
         conn.commit()
         conn.close()
 
@@ -813,13 +832,14 @@ def evaluate_fixture_safety(
                 for out in mkt["outcomes"]:
                     if is_team_match(leader_team, out["name"], leader_side) and "&" not in out["name"]:
                         odds = out["odds"]
-                        lock_ok = (diff == 2 and minute >= 83) or (diff >= 3 and minute >= 72)
+                        # Con +2 goles entre min 75-86 priorizar Doble Oportunidad / DNB (que cubren 2-2); en 1X2 puro exigir min 87+ y cuota <=1.03 o +3 goles
+                        lock_ok = (diff == 2 and minute >= 87 and odds <= 1.03) or (diff >= 3 and minute >= 75)
                         r_code = "WAIT_SCORE_DIFF" if diff < 2 else "WAIT_MINUTE"
                         add_candidate(
                             "Ganador (1X2)", f"WINNER_{leader_side}", 0.0, float(diff),
                             out["name"], leader_side, odds, ovr, lock_ok, 95,
                             f"Fútbol 1X2 | Min {minute}' | Ventaja +{diff} goles",
-                            f"1X2 @{odds:.2f} (Min {minute}', +{diff} gol | Req: +2 al 83' o +3 al 72')",
+                            f"1X2 @{odds:.2f} (Min {minute}', +{diff} gol | Req: +2 al 87' <=1.03 o +3 al 75')",
                             r_code
                         )
 
@@ -928,6 +948,11 @@ def evaluate_fixture_safety(
             "AWAY" if (a_score > h_score or (a_score >= 1 and h_score == a_score and cur_a > cur_h)) else None
         )
         effective_team = home_team if effective_side == "HOME" else (away_team if effective_side == "AWAY" else None)
+        h_g_pts = str(ev.get("homeGameScore") or "0").strip().upper()
+        a_g_pts = str(ev.get("awayGameScore") or "0").strip().upper()
+        leader_g_pts = h_g_pts if effective_side == "HOME" else a_g_pts
+        trailer_g_pts = a_g_pts if effective_side == "HOME" else h_g_pts
+        has_game_pts_lead = (leader_g_pts in ["30", "40", "AD"] and trailer_g_pts in ["0", "15"]) or (leader_g_pts == "AD")
 
         for mkt in markets:
             m_low = mkt["name"].lower()
@@ -936,18 +961,18 @@ def evaluate_fixture_safety(
                 for out in mkt["outcomes"]:
                     if is_team_match(effective_team, out["name"], effective_side):
                         odds = out["odds"]
-                        # Calibrado con +16,000 muestras IA:
-                        # - En Set 2 (1-0 sets, doble colchón): exigir 5-2/5-3/5-1/5-0 o doble quiebre 4-1/4-0 (26G / 0P = 100% WR)
-                        # - En Set 3 (1-1 sets, muerte súbita sin colchón): bloquear 5-3 y 5-2 (1 solo break); exigir doble quiebre 5-1 o 5-0
+                        # Calibrado con +30,000 muestras IA:
+                        # - En Set 2 (1-0 sets, doble colchón): ventaja >=3 games (4-0/4-1/5-2/5-1/5-0 = 62G/0P 100% WR) o 5-3 con ventaja de puntos en el game (30-0/40-15)
+                        # - En Set 3 (1-1 sets, muerte súbita sin colchón): exigir doble quiebre 5-1 o 5-0
                         lock_ok = has_active_set and same_leader and (
-                            (diff >= 1 and ((cur_leader_games >= 5 and game_diff >= 2) or (cur_leader_games >= 4 and game_diff >= 3)))
+                            (diff >= 1 and ((cur_leader_games >= 4 and game_diff >= 3) or (cur_leader_games >= 5 and game_diff == 2 and has_game_pts_lead)))
                             or (h_score >= 1 and h_score == a_score and cur_leader_games >= 5 and game_diff >= 4)
                         )
                         add_candidate(
                             "Match Winner", f"WINNER_{effective_side}", 0.0, float(game_diff),
                             out["name"], effective_side, odds, ovr, lock_ok, 94,
                             f"Tenis Match Winner | Sets {h_score}-{a_score} (Games {cur_h}-{cur_a})",
-                            f"Tenis Winner @{odds:.2f} (Sets {h_score}-{a_score}, Games {cur_h}-{cur_a} | Req: 1-0 sets + 5-2/4-1 o Set 3 5-1/5-0)",
+                            f"Tenis Winner @{odds:.2f} (Sets {h_score}-{a_score}, Games {cur_h}-{cur_a} | Req: 1-0 sets + 5-2/4-1 o 5-3 30+ pts, Set 3 5-1/5-0)",
                             "WAIT_SET_CLOSING"
                         )
 
@@ -1659,18 +1684,29 @@ def infer_sport_slug_from_label(label: str) -> str:
             return sp["slug"]
     return "soccer"
 
-def _extract_set_counts_from_periods(periods: list) -> Tuple[int, int]:
-    """Cuenta los sets ganados por Local y Visitante a partir de periodScores (evita el bug 0-0 de Stake al finalizar Tenis/Voleibol/Ping Pong)."""
+def _extract_set_counts_from_periods(periods: list, is_tennis: bool = False) -> Tuple[int, int, bool]:
+    """
+    Cuenta los sets COMPLETADOS ganados por Local y Visitante a partir de periodScores.
+    En Tenis, un set solo está completado si max(ph, pa) >= 6 y (diferencia >= 2 o >= 7).
+    Si el partido finaliza con un set incompleto (ej. 2-1 games en el 3er set), detecta Retiro (is_retired=True -> PUSH).
+    """
     p_h = 0
     p_a = 0
+    is_retired = False
     for p in (periods or []):
         ph = int(p.get("homeScore") or 0)
         pa = int(p.get("awayScore") or 0)
+        if is_tennis:
+            set_done = (max(ph, pa) >= 6 and abs(ph - pa) >= 2) or (max(ph, pa) >= 7)
+            if not set_done:
+                if max(ph, pa) > 0:
+                    is_retired = True
+                continue
         if ph > pa:
             p_h += 1
         elif pa > ph:
             p_a += 1
-    return p_h, p_a
+    return p_h, p_a, is_retired
 
 def settle_pending_bets(session: requests.Session):
     with DB_LOCK:
@@ -1793,6 +1829,10 @@ def settle_pending_bets(session: requests.Session):
                         runtime_state["stake_blocked_until"] = now_ts + 90
                     continue
                 data = (res.json().get("data") or {}).get("slugFixture")
+                if not data and slug not in live_slugs:
+                    all_ts = [b[11] for b in real_bets_by_slug.get(slug, [])] + [o[10] for o in obs_by_slug.get(slug, [])]
+                    if all_ts and (now_ts - min(all_ts)) > 14400:
+                        data = {"status": "ended", "eventStatus": {"homeScore": None, "awayScore": None, "matchStatus": "ended"}}
 
             if not data:
                 continue
@@ -1804,7 +1844,8 @@ def settle_pending_bets(session: requests.Session):
             is_finished = fixture_status in ["ended", "closed", "settled"]
             ev_h = ev.get("homeScore")
             ev_a = ev.get("awayScore")
-            p_h, p_a = _extract_set_counts_from_periods(ev.get("periodScores") or [])
+            p_h, p_a, _ = _extract_set_counts_from_periods(ev.get("periodScores") or [], is_tennis=False)
+            p_h_ten, p_a_ten, is_ten_retired = _extract_set_counts_from_periods(ev.get("periodScores") or [], is_tennis=True)
 
             if not is_finished:
                 # Actualizar el reloj restante en vivo de las apuestas activas aunque no estén en top fixtures
@@ -1833,10 +1874,16 @@ def settle_pending_bets(session: requests.Session):
                 final_h = raw_h if (raw_h + raw_a) >= (int(last_h or 0) + int(last_a or 0)) else int(last_h or 0)
                 final_a = raw_a if (raw_h + raw_a) >= (int(last_h or 0) + int(last_a or 0)) else int(last_a or 0)
 
+                if sp_label == "🎾 Tenis" and is_ten_retired and max(p_h_ten, p_a_ten) < 2:
+                    bet_settlements.append(("PUSH", 0.0, f"{p_h_ten}-{p_a_ten} (Ret.)", b_id))
+                    continue
+
                 if sp_label in ["🎾 Tenis", "🏐 Voleibol", "🏓 Ping Pong"]:
-                    if (p_h + p_a) >= (final_h + final_a) and p_h != p_a:
-                        final_h, final_a = p_h, p_a
-                    elif slug.startswith("kambi-") and final_h == final_a:
+                    use_ph = p_h_ten if sp_label == "🎾 Tenis" else p_h
+                    use_pa = p_a_ten if sp_label == "🎾 Tenis" else p_a
+                    if (use_ph + use_pa) >= (final_h + final_a) and use_ph != use_pa:
+                        final_h, final_a = use_ph, use_pa
+                    elif (slug.startswith("kambi-") or ev_h is None) and final_h == final_a:
                         p_scores = ev.get("periodScores") or []
                         if p_scores:
                             lp = p_scores[-1]
@@ -1849,6 +1896,11 @@ def settle_pending_bets(session: requests.Session):
                             final_h += 1
                         elif side == "AWAY":
                             final_a += 1
+                    elif ev_h is None and max(final_h, final_a) == 1:
+                        if side == "HOME" and final_h > final_a:
+                            final_h = 2
+                        elif side == "AWAY" and final_a > final_h:
+                            final_a = 2
                     # Evitar liquidar en el segundo de transición donde Stake aún no subió el 2do/3er set ganador (< 2 sets)
                     if max(final_h, final_a) < 2 and (now_ts - ts) < 7200:
                         can_cache_settled = False
@@ -1875,10 +1927,16 @@ def settle_pending_bets(session: requests.Session):
                 final_h = raw_h if (raw_h + raw_a) >= (int(last_h or 0) + int(last_a or 0)) else int(last_h or 0)
                 final_a = raw_a if (raw_h + raw_a) >= (int(last_h or 0) + int(last_a or 0)) else int(last_a or 0)
 
+                if sp_slug == "tennis" and is_ten_retired and max(p_h_ten, p_a_ten) < 2:
+                    obs_settlements.append(("PUSH", None, 0.0, p_h_ten, p_a_ten, f"{p_h_ten}-{p_a_ten} (Ret.)", now_ts, o_id))
+                    continue
+
                 if sp_slug in ["tennis", "volleyball", "table-tennis"]:
-                    if (p_h + p_a) >= (final_h + final_a) and p_h != p_a:
-                        final_h, final_a = p_h, p_a
-                    elif slug.startswith("kambi-") and final_h == final_a:
+                    use_ph = p_h_ten if sp_slug == "tennis" else p_h
+                    use_pa = p_a_ten if sp_slug == "tennis" else p_a
+                    if (use_ph + use_pa) >= (final_h + final_a) and use_ph != use_pa:
+                        final_h, final_a = use_ph, use_pa
+                    elif (slug.startswith("kambi-") or ev_h is None) and final_h == final_a:
                         p_scores = ev.get("periodScores") or []
                         if p_scores:
                             lp = p_scores[-1]
@@ -1891,6 +1949,11 @@ def settle_pending_bets(session: requests.Session):
                             final_h += 1
                         elif side == "AWAY":
                             final_a += 1
+                    elif ev_h is None and max(final_h, final_a) == 1:
+                        if side == "HOME" and final_h > final_a:
+                            final_h = 2
+                        elif side == "AWAY" and final_a > final_h:
+                            final_a = 2
                     if max(final_h, final_a) < 2 and (now_ts - ts) < 7200:
                         can_cache_settled = False
                         continue

@@ -1,6 +1,7 @@
 # 🛡️ Respaldo Maestro del Proyecto & Calibración IA — Stake Multi-Sport Ultra-Safe Bot
 
 **ID de Conversación Antigravity:** `870c61b0-62e9-41c9-8f2a-933862b8ba26`  
+**Última Actualización del Respaldo:** `2026-11-05`  
 **Carpeta Local del Proyecto:** `c:\Users\Franyer Alb\Desktop\BOT STAKE`  
 **Repositorio GitHub / Render Cloud 24/7:** `C:\Users\Franyer Alb\Documents\GitHub\bot-stake-ai` (`https://bot-stake-ai.onrender.com`)  
 **Base de Datos SQLite en Vivo:** `c:\Users\Franyer Alb\Desktop\BOT STAKE\stake_paper_30k.db`
@@ -18,7 +19,7 @@
 
 ---
 
-## 2. Reglas Ultra-Seguras Calibradas con +11,000 Muestras Reales (`evaluate_fixture_safety`)
+## 2. Reglas Ultra-Seguras Calibradas con +27,000 Muestras Reales (`evaluate_fixture_safety`)
 
 ### ⚽ 1. Fútbol (`soccer`)
 - **Doble Oportunidad (`1X / X2`) — Prioridad 99**:
@@ -37,27 +38,32 @@
 - **Ambos Anotan: NO (`BTTS: No`)**:
   - **Deshabilitado para dinero real (`lock_ok = False`)**, guardado únicamente en modo sombra para la IA, porque 1 solo gol en contra causa pérdida total (`-500 USDT`), mientras que `DNB` reembolsa y `Doble Oportunidad` gana.
 
-### 🎾 2. Tenis (`tennis`)
+### 🎾 2. Tenis (`tennis`) — Regla de Doble Colchón de Set vs Set Final
 - **Prohibido entrar en el 1er Set (`0-0 sets`)** y prohibido entrar en descansos (`has_active_set`).
-- Con **1 set de ventaja (`1-0` sets)**: el líder del partido debe ir ganando también el 2do set por **`5-2 / 5-3 / 5-1 / 5-0`** (`cur_leader_games >= 5` y `game_diff >= 2`) o con **doble quiebre `4-1 / 4-0`** (`cur_leader_games >= 4` y `game_diff >= 3`). **Bloqueado el `4-2` (un solo quiebre)**.
-- En el **3er set definitivo (`1-1` sets)**: solo entra cuando el jugador está a 1 game de cerrar el partido con ventaja de 2+ games (`5-2` o `5-3`).
+- **En el 2do Set (`1-0` o `0-1` sets, con colchón de set)**: el líder del partido debe ir ganando también el 2do set por **`5-2 / 5-3 / 5-1 / 5-0`** (`cur_leader_games >= 5` y `game_diff >= 2`) o con **doble quiebre `4-1 / 4-0`** (`cur_leader_games >= 4` y `game_diff >= 3`). **Bloqueado el `4-2` (un solo quiebre)**.
+- **En el 3er Set (`1-1` sets, muerte súbita sin colchón de set)**: **bloqueados el `5-3` y el `5-2`** (un solo break); solo entra con **doble quiebre de saque (`5-1` o `5-0`, `cur_leader_games >= 5` y `game_diff >= 4`)**.
 
-### 🏀 3. Baloncesto (`basketball`)
+### 🏓 3. Ping Pong (`table-tennis`) — Regla `2-0` vs `2-1` Sets
+- Verificación obligatoria de **set activo en juego** (`has_active_set = (len(periods) > (h_score + a_score)) and (not is_paused_break)`), bloqueando cualquier entrada durante descansos entre sets (`Second break`, `Third break`).
+- **Con `2-0` en sets (`diff >= 2`, doble colchón de set)**: `>= 8` puntos y ventaja `>= +3` puntos (`8-5`, `9-6`, `10-7`).
+- **Con `2-1` en sets (`diff == 1`, 4to set)**: exige **`>= 9` puntos con ventaja `>= +3` (`9-6`, `10-7`)** o **`>= 8` puntos con ventaja `>= +4` (`8-4`, `9-5`)**, bloqueando remontadas desde `8-5`.
+
+### 🏐 4. Voleibol (`volleyball`) — Regla `2-0` vs `2-1` Sets
+- Verificación obligatoria de **set activo en juego** (`has_active_set`).
+- **Con `2-0` en sets (`diff >= 2`, doble colchón de set)**: `>= 18` puntos y ventaja `>= +4` puntos.
+- **Con `2-1` en sets (`diff == 1`, 4to set)**: exige **`>= 21` puntos con ventaja `>= +4` (`21-17`, `22-18`)** o **`>= 19` puntos con ventaja `>= +6` (`19-13`)**, bloqueando remontadas desde `18-14`.
+
+### 🏀 5. Baloncesto (`basketball`)
 - Solo en el **4to Cuarto (`4th quarter / Q4 / OT`)** verificando los **segundos reales restantes (`rem_seconds`)**:
   - `+12 pts` o más con **`<= 3:00` minutos restantes (`0 <= rem_s <= 180`)**.
   - `+18 pts` o más con **`<= 5:00` minutos restantes (`0 <= rem_s <= 300`)**.
   - `+24 pts` o más en el 4to cuarto.
 
-### 🏒 4. Hockey sobre Hielo (`ice-hockey`)
+### 🏒 6. Hockey sobre Hielo (`ice-hockey`)
 - **Prohibido entrar con `+1 gol`** (por la regla de *Empty Net 6v5* sin portero en los últimos minutos).
 - Solo en el **3er Período (`3rd period / P3 / OT`)**:
   - `+2 goles` de ventaja con **reloj real `<= 2:00` minutos restantes (`0 <= rem_s <= 120`)** y mercado **`Winner (Incl. Overtime and Penalties)`**.
   - `+3 goles` de ventaja en los últimos `8:00` minutos (`0 <= rem_s <= 480` o `minute >= 52'`).
-
-### 🏐 5. Voleibol (`volleyball`) y 🏓 6. Ping Pong (`table-tennis`)
-- Verificación obligatoria de **set activo en juego** (`has_active_set = (len(periods) > (h_score + a_score)) and (not is_paused_break)`), bloqueando cualquier entrada durante descansos entre sets (`Second break`, `Third break`).
-- **Voleibol**: `2` sets ganados + liderando el set actual con `>= 18` puntos y ventaja `>= +4` puntos.
-- **Ping Pong**: `2` sets ganados + liderando el set actual con `>= 8` puntos y ventaja `>= +3` puntos (`8-5`, `9-6`, `10-6`).
 
 ---
 
@@ -80,7 +86,3 @@ cd "c:\Users\Franyer Alb\Desktop\BOT STAKE"
 ```
 - Panel web local: `http://localhost:6111`
 - Panel web Cloud 24/7: `https://bot-stake-ai.onrender.com`
-
-### Qué archivos pasarme en el futuro para seguir afinando la IA:
-1. **`stake_ai_dataset_full.csv`** (botón verde **Exportar CSV IA** en el panel)
-2. **`stake_ai_dataset_full.json`** (botón azul **JSON IA** en el panel)

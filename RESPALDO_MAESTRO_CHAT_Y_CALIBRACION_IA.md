@@ -1,8 +1,9 @@
 # 🛡️ Respaldo Maestro del Proyecto & Calibración IA — Stake Multi-Sport Ultra-Safe Bot
 
 **ID de Conversación Antigravity:** `870c61b0-62e9-41c9-8f2a-933862b8ba26`  
-**Última Actualización del Respaldo:** `2026-11-05`  
+**Última Actualización del Respaldo:** `2026-11-06`  
 **Carpeta Local del Proyecto:** `c:\Users\Franyer Alb\Desktop\BOT STAKE`  
+**Carpeta de Respaldo en Escritorio (`ASD`):** `C:\Users\Franyer Alb\Desktop\ASD`  
 **Repositorio GitHub / Render Cloud 24/7:** `C:\Users\Franyer Alb\Documents\GitHub\bot-stake-ai` (`https://bot-stake-ai.onrender.com`)  
 **Base de Datos SQLite en Vivo:** `c:\Users\Franyer Alb\Desktop\BOT STAKE\stake_paper_30k.db`
 
@@ -19,70 +20,84 @@
 
 ---
 
-## 2. Reglas Ultra-Seguras Calibradas con +27,000 Muestras Reales (`evaluate_fixture_safety`)
+## 2. Reglas Ultra-Seguras Calibradas con +30,000 Muestras Reales (`evaluate_fixture_safety`)
 
 ### ⚽ 1. Fútbol (`soccer`)
 - **Doble Oportunidad (`1X / X2`) — Prioridad 99**:
   - `+2 goles` de ventaja: minuto `>= 75'`.
-  - `+1 gol` de ventaja: minuto `>= 85'`, cuota `<= 1.04` y **partido cerrado (`total_score <= 2`, es decir `1-0` o `0-1`)**. Prohibido entrar con `+1 gol` en partidos abiertos (`2-1` / `1-2`).
+  - `+1 gol` de ventaja: minuto `>= 85'`, cuota `<= 1.04` y `total_score <= 2` (`1-0` o `0-1`, prohibido entrar en partidos abiertos `2-1`/`3-2`).
 - **Sin Empate (`Draw No Bet / DNB`) — Prioridad 98**:
-  - Si empatan al final, **NO se pierde (`PUSH`, reembolso `0.00 USDT`)**.
   - `+2 goles` de ventaja: minuto `>= 75'`.
-  - `+1 gol` de ventaja: minuto `>= 85'`, cuota `<= 1.04` y partido cerrado (`1-0` o `0-1`).
-- **Menos de X.5 Goles (`Under X.5`) — Prioridad 96**:
-  - Colchón de **3 goles (`cushion >= 2.5`)**: entre minuto `78'` y `89'`, con `total_score <= 2`.
-  - Colchón de **2 goles (`cushion >= 1.5`)**: entre minuto `86'` y `89'`, prohibido en empates (`diff >= 1`), `total_score <= 2` y cuota `<= 1.03`.
+  - `+1 gol` de ventaja: minuto `>= 85'`, cuota `<= 1.04` y `total_score <= 2` (si empatan al 90', devuelve el 100% del capital: `PUSH = 0.00 USDT`).
+- **Under `X.5` Goles — Prioridad 96**:
+  - Colchón `>= 2.5 goles` (necesita 3 goles en contra para perder): minuto `78'` a `89'` y `total_score <= 2`.
+  - Colchón `>= 1.5 goles` (necesita 2 goles en contra para perder): minuto `86'` a `89'`, `diff >= 1` (prohibido en empates `0-0`/`1-1`), `total_score <= 2` y cuota `<= 1.03`.
   - Prohibido entrar en tiempo de descuento (`>= 90'`).
-- **Ganador `1X2` — Prioridad 95**:
-  - `+2 goles` al minuto `>= 83'` o `+3 goles` al minuto `>= 72'`.
-- **Ambos Anotan: NO (`BTTS: No`)**:
-  - **Deshabilitado para dinero real (`lock_ok = False`)**, guardado únicamente en modo sombra para la IA, porque 1 solo gol en contra causa pérdida total (`-500 USDT`), mientras que `DNB` reembolsa y `Doble Oportunidad` gana.
+- **Ganador (`1X2`) — Prioridad 95**:
+  - Con `+2 goles` entre los minutos `75'` y `86'`, solo entran `Doble Oportunidad` o `Sin Empate (DNB)` (que protegen ante un `0-2 -> 2-2` como `#232`).
+  - En `1X2` puro: exige `+2 goles` con minuto `>= 87'` y cuota `<= 1.03`, o `+3 goles` de ventaja al minuto `>= 75'`.
+- **Ambos Anotan: NO (`BTTS: No`) — Solo Sombra IA (`lock_ok = False`)**:
+  - Deshabilitado para dinero real por riesgo de muerte súbita con 1 solo gol (`0-1 -> 1-1` pierde `-500 USDT`, mientras que en `DNB` reembolsa y en `1X/X2` gana).
 
-### 🎾 2. Tenis (`tennis`) — Regla de Doble Colchón de Set vs Set Final
-- **Prohibido entrar en el 1er Set (`0-0 sets`)** y prohibido entrar en descansos (`has_active_set`).
-- **En el 2do Set (`1-0` o `0-1` sets, con colchón de set)**: el líder del partido debe ir ganando también el 2do set por **`5-2 / 5-3 / 5-1 / 5-0`** (`cur_leader_games >= 5` y `game_diff >= 2`) o con **doble quiebre `4-1 / 4-0`** (`cur_leader_games >= 4` y `game_diff >= 3`). **Bloqueado el `4-2` (un solo quiebre)**.
-- **En el 3er Set (`1-1` sets, muerte súbita sin colchón de set)**: **bloqueados el `5-3` y el `5-2`** (un solo break); solo entra con **doble quiebre de saque (`5-1` o `5-0`, `cur_leader_games >= 5` y `game_diff >= 4`)**.
+### 🎾 2. Tenis (`tennis`)
+- **Prohibido entrar en el 1er Set (`0-0` sets)** y **prohibido entrar en descansos entre sets (`has_active_set`)**.
+- **En el 2do Set (`1-0` o `0-1` sets, con colchón de 3er set)**:
+  - El mismo jugador que ganó el 1er set debe liderar el 2do set con:
+    - **Ventaja de `>= 3` games (`4-0`, `4-1`, `5-2`, `5-1`, `5-0`)** — **`62 Ganadas / 0 Perdidas = 100.00% Win Rate`**, o
+    - **`5-3` en games (`game_diff == 2`) Y ventaja de puntos en el game actual (`has_game_pts_lead`: `30-0`, `30-15`, `40-0`, `40-15` o `AD`)**, bloqueando quiebres en `5-3 (0-0)` o `5-3 (0-15)` como `#236`.
+- **En el 3er Set (`1-1` sets, muerte súbita sin colchón)**:
+  - Bloqueados `5-3` y `5-2` (un solo quiebre).
+  - Exige **doble quiebre de ventaja a 1 game del partido: `5-1` o `5-0`** (`cur_leader_games >= 5 and game_diff >= 4`).
+- **Liquidación Oficial anti-bug `0-0` y Detección de Retiros (`_extract_set_counts_from_periods`)**:
+  - Calcula los sets completados (`(max(ph, pa) >= 6 and abs(ph - pa) >= 2) or max(ph, pa) >= 7`) directamente desde `periodScores`.
+  - Si un partido de Tenis finaliza con un set incompleto (`0 < max(ph, pa) < 6`, ej. `[6-7, 7-5, 2-1]` en `#238 Hurrion vs Zhao`), detecta **Retiro (`is_retired = True`)** y lo liquida oficialmente como **`PUSH / Reembolso (0.00 USDT, 1-1 Ret.)`**.
 
-### 🏓 3. Ping Pong (`table-tennis`) — Regla `2-0` vs `2-1` Sets
-- Verificación obligatoria de **set activo en juego** (`has_active_set = (len(periods) > (h_score + a_score)) and (not is_paused_break)`), bloqueando cualquier entrada durante descansos entre sets (`Second break`, `Third break`).
-- **Con `2-0` en sets (`diff >= 2`, doble colchón de set)**: `>= 8` puntos y ventaja `>= +3` puntos (`8-5`, `9-6`, `10-7`).
-- **Con `2-1` en sets (`diff == 1`, 4to set)**: exige **`>= 9` puntos con ventaja `>= +3` (`9-6`, `10-7`)** o **`>= 8` puntos con ventaja `>= +4` (`8-4`, `9-5`)**, bloqueando remontadas desde `8-5`.
+### 🏓 3. Ping Pong / Tenis de Mesa (`table-tennis`)
+- **Filtro Anti-Descanso (`has_active_set`)**:
+  - Exige `len(periods) > (h_score + a_score)` y que no esté en descanso (`Second break`, etc.), evitando leer el marcador del set anterior.
+- **Con `2-0` en sets (`diff >= 2`, doble colchón de set)**:
+  - Exige liderar el 3er set con **`>= 8` puntos y ventaja `>= +3` puntos** (`8-5`, `8-4`, `9-6`, `10-7`, etc.) — **`100.00% Win Rate`**.
+- **Con `2-1` en sets (`diff == 1`, 4to set)**:
+  - Exige **`>= 9` puntos y ventaja `>= +3`** (`9-6`, `9-5`, `10-7`) o **`>= 8` puntos y ventaja `>= +4`** (`8-4`, `8-3`, `8-2`), bloqueando remontadas de `8-5` en el 4to set — **`100.00% Win Rate`**.
 
-### 🏐 4. Voleibol (`volleyball`) — Regla `2-0` vs `2-1` Sets
-- Verificación obligatoria de **set activo en juego** (`has_active_set`).
-- **Con `2-0` en sets (`diff >= 2`, doble colchón de set)**: `>= 18` puntos y ventaja `>= +4` puntos.
-- **Con `2-1` en sets (`diff == 1`, 4to set)**: exige **`>= 21` puntos con ventaja `>= +4` (`21-17`, `22-18`)** o **`>= 19` puntos con ventaja `>= +6` (`19-13`)**, bloqueando remontadas desde `18-14`.
+### 🏐 4. Voleibol (`volleyball`)
+- **Filtro Anti-Descanso (`has_active_set`)**:
+  - Exige set en curso activo (`len(periods) > (h_score + a_score)`).
+- **Con `2-0` en sets (`diff >= 2`, doble colchón de set)**:
+  - Exige liderar el 3er set con **`>= 18` puntos y ventaja `>= +4` puntos** — **`100.00% Win Rate`**.
+- **Con `2-1` en sets (`diff == 1`, 4to set)**:
+  - Exige **`>= 21` puntos y ventaja `>= +4`** (`21-17`, `22-18`) o **`>= 19` puntos y ventaja `>= +6`** (`19-13`, `20-14`), bloqueando remontadas desde `18-14` en el 4to set — **`100.00% Win Rate`**.
 
 ### 🏀 5. Baloncesto (`basketball`)
-- Solo en el **4to Cuarto (`4th quarter / Q4 / OT`)** verificando los **segundos reales restantes (`rem_seconds`)**:
-  - `+12 pts` o más con **`<= 3:00` minutos restantes (`0 <= rem_s <= 180`)**.
-  - `+18 pts` o más con **`<= 5:00` minutos restantes (`0 <= rem_s <= 300`)**.
-  - `+24 pts` o más en el 4to cuarto.
+- Solo en el **4to Cuarto (`Q4`) o Prórroga (`OT`)** con reloj restante real verificado (`rem_s >= 0`):
+  - `<= 3:00` restantes (`rem_s <= 180`) con **`+12` puntos o más**.
+  - `<= 5:00` restantes (`rem_s <= 300`) con **`+18` puntos o más**.
+  - **`+24` puntos o más** en cualquier momento del 4to cuarto.
 
 ### 🏒 6. Hockey sobre Hielo (`ice-hockey`)
-- **Prohibido entrar con `+1 gol`** (por la regla de *Empty Net 6v5* sin portero en los últimos minutos).
-- Solo en el **3er Período (`3rd period / P3 / OT`)**:
-  - `+2 goles` de ventaja con **reloj real `<= 2:00` minutos restantes (`0 <= rem_s <= 120`)** y mercado **`Winner (Incl. Overtime and Penalties)`**.
-  - `+3 goles` de ventaja en los últimos `8:00` minutos (`0 <= rem_s <= 480` o `minute >= 52'`).
+- **Prohibido entrar con `+1` gol** (por el ataque `6 contra 5` sin portero en los últimos 2 minutos).
+- Solo en el **3er Período (`P3`)**:
+  - Con **`+2` goles**: exige mercado **`Winner (Incl. Overtime and Penalties)`** y reloj restante real **`<= 2:00` (`0 <= rem_s <= 120`)**.
+  - Con **`+3` goles o más**: últimos 8 minutos del 3er período (`minute >= 52` o `0 <= rem_s <= 480`).
+
+### 🏈 7. Fútbol Americano (`american-football`) y ⚾ 8. Béisbol (`baseball`)
+- **Fútbol Americano**: `+14` puntos (2 Touchdowns) en el `4to Cuarto (Q4)`, o `+21` puntos (3 Touchdowns) en el `3er Cuarto (Q3)`.
+- **Béisbol**: `+3` carreras o más en la `8va` o `9na` entrada (`8th` / `9th inning`).
 
 ---
 
-## 3. Blindaje de Liquidación (`settle_pending_bets`)
-1. **Conteo de sets desde `periodScores` (`_extract_set_counts_from_periods`)**:
-   - En Tenis, Voleibol y Ping Pong, cuando Stake finaliza un partido y resetea `homeScore: 0, awayScore: 0`, el liquidador cuenta los sets ganados directamente desde `eventStatus.periodScores`.
-2. **Protección contra transición prematura en partidos por sets**:
-   - No liquida ni guarda en caché un partido por sets recién finalizado hasta que el ganador tenga los `2` sets reglamentarios (`max(final_h, final_a) >= 2`), evitando falsos negativos en el segundo de cierre.
-3. **Protección Anti-Reset de Marcador en Vivo**:
-   - `last_h` y `last_a` nunca se sobrescriben con `0-0` si el partido ya tenía puntuación acumulada.
+## 3. Ubicación de los Respaldos Permanentes de este Chat
 
----
-
-## 4. Comandos Rápidos para Iniciar o Actualizar
-
-### Iniciar el bot en tu PC:
-```powershell
-cd "c:\Users\Franyer Alb\Desktop\BOT STAKE"
-.\.venv\Scripts\python.exe main.py
-```
-- Panel web local: `http://localhost:6111`
-- Panel web Cloud 24/7: `https://bot-stake-ai.onrender.com`
+1. **En la carpeta principal del proyecto (`BOT STAKE`)**:
+   - Resumen Maestro y Reglas: `c:\Users\Franyer Alb\Desktop\BOT STAKE\RESPALDO_MAESTRO_CHAT_Y_CALIBRACION_IA.md`
+   - Historial Completo Legible (Markdown): `c:\Users\Franyer Alb\Desktop\BOT STAKE\historial_chat_respaldo\HISTORIAL_COMPLETO_CONVERSACION.md`
+   - Transcripción Íntegra Original (JSONL): `c:\Users\Franyer Alb\Desktop\BOT STAKE\historial_chat_respaldo\transcript_full.jsonl`
+2. **En tu carpeta del Escritorio (`ASD`)**:
+   - `C:\Users\Franyer Alb\Desktop\ASD\RESPALDO_MAESTRO_CHAT_Y_CALIBRACION_IA.md`
+   - `C:\Users\Franyer Alb\Desktop\ASD\HISTORIAL_COMPLETO_CONVERSACION.md`
+   - `C:\Users\Franyer Alb\Desktop\ASD\transcript_full.jsonl`
+3. **En tu repositorio de GitHub (`bot-stake-ai`)**:
+   - `C:\Users\Franyer Alb\Documents\GitHub\bot-stake-ai\RESPALDO_MAESTRO_CHAT_Y_CALIBRACION_IA.md`
+   - `C:\Users\Franyer Alb\Documents\GitHub\bot-stake-ai\HISTORIAL_COMPLETO_CONVERSACION.md`
+4. **En el directorio de Artefactos de Antigravity**:
+   - `C:\Users\Franyer Alb\.gemini\antigravity\brain\870c61b0-62e9-41c9-8f2a-933862b8ba26\RESPALDO_MAESTRO_CHAT_Y_CALIBRACION_IA.md`

@@ -277,6 +277,30 @@ def init_db():
                 final_h = 1, final_a = 1, final_score = '1-1 (Ret.)'
             WHERE match_name LIKE '%Hurrion, Millen%' AND status = 'LOST'
         """)
+        # Reparar partidos Kambi (ej. Brandy Walker vs Helene Schnack 1-5 en Set 3) donde cached_ev tenía el último game en curso al cerrar Kambi (404)
+        c.execute("""
+            SELECT id, side, stake, odds, pnl FROM bets
+            WHERE slug LIKE 'kambi-%' AND status = 'PUSH' AND final_score LIKE '%(Ret.)%'
+        """)
+        for k_id, k_side, k_stake, k_odds, k_old_pnl in c.fetchall():
+            new_pnl = round(float(k_stake) * (float(k_odds) - 1.0), 2)
+            diff_pnl = round(new_pnl - float(k_old_pnl), 2)
+            fin_h = 2 if k_side == 'HOME' else 1
+            fin_a = 1 if k_side == 'HOME' else 2
+            c.execute("UPDATE account SET val = val + ? WHERE key = 'equity'", (diff_pnl,))
+            c.execute("""
+                UPDATE bets
+                SET status = 'WON', pnl = ?, final_score = ?, last_h = ?, last_a = ?
+                WHERE id = ?
+            """, (new_pnl, f"{fin_h}-{fin_a}", fin_h, fin_a, k_id))
+        c.execute("""
+            UPDATE ai_observations
+            SET status = 'WON', target_win = 1, hypothetical_roi = ROUND(odds - 1.0, 4),
+                final_h = CASE WHEN side = 'HOME' THEN 2 ELSE 1 END,
+                final_a = CASE WHEN side = 'AWAY' THEN 2 ELSE 1 END,
+                final_score = CASE WHEN side = 'HOME' THEN '2-1' ELSE '1-2' END
+            WHERE slug LIKE 'kambi-%' AND status = 'PUSH' AND final_score LIKE '%(Ret.)%'
+        """)
         conn.commit()
         conn.close()
 
@@ -1874,7 +1898,7 @@ def settle_pending_bets(session: requests.Session):
                 final_h = raw_h if (raw_h + raw_a) >= (int(last_h or 0) + int(last_a or 0)) else int(last_h or 0)
                 final_a = raw_a if (raw_h + raw_a) >= (int(last_h or 0) + int(last_a or 0)) else int(last_a or 0)
 
-                if sp_label == "🎾 Tenis" and is_ten_retired and max(p_h_ten, p_a_ten) < 2:
+                if sp_label == "🎾 Tenis" and (not slug.startswith("kambi-")) and is_ten_retired and max(p_h_ten, p_a_ten) < 2:
                     bet_settlements.append(("PUSH", 0.0, f"{p_h_ten}-{p_a_ten} (Ret.)", b_id))
                     continue
 
@@ -1927,7 +1951,7 @@ def settle_pending_bets(session: requests.Session):
                 final_h = raw_h if (raw_h + raw_a) >= (int(last_h or 0) + int(last_a or 0)) else int(last_h or 0)
                 final_a = raw_a if (raw_h + raw_a) >= (int(last_h or 0) + int(last_a or 0)) else int(last_a or 0)
 
-                if sp_slug == "tennis" and is_ten_retired and max(p_h_ten, p_a_ten) < 2:
+                if sp_slug == "tennis" and (not slug.startswith("kambi-")) and is_ten_retired and max(p_h_ten, p_a_ten) < 2:
                     obs_settlements.append(("PUSH", None, 0.0, p_h_ten, p_a_ten, f"{p_h_ten}-{p_a_ten} (Ret.)", now_ts, o_id))
                     continue
 

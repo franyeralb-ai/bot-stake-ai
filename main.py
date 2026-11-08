@@ -903,10 +903,12 @@ def evaluate_fixture_safety(
                         line = float(m_under.group(1))
                         cushion = line - total_score
                         odds = out["odds"]
-                        # Calibrado con +11,000 muestras IA: prohibido entrar Under con colchón 1.5 en empates (1-1), partidos abiertos (>=3 goles) o descuento (>=90')
+                        # Calibrado con +56,000 muestras IA:
+                        # - Colchón >=2.5 goles (3 goles de margen): min 78-89 y máx 2 goles (100% WR)
+                        # - Colchón ==1.5 goles (2 goles de margen): exigir min 86-89, 1-0 o 0-1 (total_score==1, 31G/0P = 100% WR) y prohibir en 2-0/0-2 (evita 0-2 -> 0-4)
                         lock_ok = (
                             (cushion >= 2.5 and 78 <= minute <= 89 and total_score <= 2)
-                            or (cushion >= 1.5 and 86 <= minute <= 89 and diff >= 1 and total_score <= 2 and odds <= 1.03)
+                            or (cushion >= 1.5 and 86 <= minute <= 89 and diff == 1 and total_score == 1 and odds <= 1.03)
                         )
                         goals_needed = int(cushion + 0.5)
                         r_code = "LOW_CUSHION" if cushion < 1.5 else "WAIT_MINUTE"
@@ -985,18 +987,22 @@ def evaluate_fixture_safety(
                 for out in mkt["outcomes"]:
                     if is_team_match(effective_team, out["name"], effective_side):
                         odds = out["odds"]
-                        # Calibrado con +30,000 muestras IA:
-                        # - En Set 2 (1-0 sets, doble colchón): ventaja >=3 games (4-0/4-1/5-2/5-1/5-0 = 62G/0P 100% WR) o 5-3 con ventaja de puntos en el game (30-0/40-15)
+                        # Calibrado con +56,000 muestras IA (93G / 0P = 100.00% WR):
+                        # - En Set 2 (1-0/0-1 sets): exigir doble quiebre 5-2/5-1/5-0/4-0 o 4-1 donde el rival no vaya 30/40/AD arriba en su saque; prohibido 5-3 (1 solo quiebre)
                         # - En Set 3 (1-1 sets, muerte súbita sin colchón): exigir doble quiebre 5-1 o 5-0
                         lock_ok = has_active_set and same_leader and (
-                            (diff >= 1 and ((cur_leader_games >= 4 and game_diff >= 3) or (cur_leader_games >= 5 and game_diff == 2 and has_game_pts_lead)))
+                            (diff >= 1 and (
+                                (cur_leader_games >= 5 and game_diff >= 3)
+                                or (cur_leader_games >= 4 and game_diff >= 4)
+                                or (cur_leader_games == 4 and game_diff == 3 and trailer_g_pts in ["0", "15"])
+                            ))
                             or (h_score >= 1 and h_score == a_score and cur_leader_games >= 5 and game_diff >= 4)
                         )
                         add_candidate(
                             "Match Winner", f"WINNER_{effective_side}", 0.0, float(game_diff),
                             out["name"], effective_side, odds, ovr, lock_ok, 94,
                             f"Tenis Match Winner | Sets {h_score}-{a_score} (Games {cur_h}-{cur_a})",
-                            f"Tenis Winner @{odds:.2f} (Sets {h_score}-{a_score}, Games {cur_h}-{cur_a} | Req: 1-0 sets + 5-2/4-1 o 5-3 30+ pts, Set 3 5-1/5-0)",
+                            f"Tenis Winner @{odds:.2f} (Sets {h_score}-{a_score}, Games {cur_h}-{cur_a} | Req: 1-0 sets + 5-2/4-0/4-1 o Set 3 5-1/5-0)",
                             "WAIT_SET_CLOSING"
                         )
 
@@ -1068,12 +1074,12 @@ def evaluate_fixture_safety(
                                 or (diff == 1 and ((cur_leader_pts >= 21 and pts_lead >= 4) or (cur_leader_pts >= 19 and pts_lead >= 6)))
                             )
                         elif sport_slug == "table-tennis":
-                            # Calibrado con +22,000 muestras IA (100% WR):
+                            # Calibrado con +56,000 muestras IA (100% WR):
                             # - Con 2-0 en sets (doble colchón de set): >=8 pts y ventaja >=3 pts
-                            # - Con 2-1 en sets (Set 4): exigir (>=9 pts y ventaja >=3) o (>=8 pts y ventaja >=4) para bloquear remontadas de 8-5
+                            # - Con 2-1 en sets (Set 4): bloquear 8-4 y 10-7 (que remontan al 5to set); exigir >=10 pts y ventaja >=5 (10-5 o mejor)
                             lock_ok = has_active_set and sets_won >= 2 and (
                                 (diff >= 2 and cur_leader_pts >= 8 and pts_lead >= 3)
-                                or (diff == 1 and ((cur_leader_pts >= 9 and pts_lead >= 3) or (cur_leader_pts >= 8 and pts_lead >= 4)))
+                                or (diff == 1 and cur_leader_pts >= 10 and pts_lead >= 5)
                             )
                         else:
                             lock_ok = diff >= 3 and any(k in status_lower for k in ["8th", "9th"])

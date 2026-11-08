@@ -30,8 +30,8 @@
   - `+2 goles` de ventaja: minuto `>= 75'`.
   - `+1 gol` de ventaja: minuto `>= 85'`, cuota `<= 1.04` y `total_score <= 2` (si empatan al 90', devuelve el 100% del capital: `PUSH = 0.00 USDT`).
 - **Under `X.5` Goles — Prioridad 96**:
-  - Colchón `>= 2.5 goles` (necesita 3 goles en contra para perder): minuto `78'` a `89'` y `total_score <= 2`.
-  - Colchón `>= 1.5 goles` (necesita 2 goles en contra para perder): minuto `86'` a `89'`, `diff >= 1` (prohibido en empates `0-0`/`1-1`), `total_score <= 2` y cuota `<= 1.03`.
+  - Colchón `>= 2.5 goles` (necesita 3 goles en contra para perder): minuto `78'` a `89'` y `total_score <= 2` (`100.00% Win Rate`).
+  - Colchón `== 1.5 goles` (necesita 2 goles en contra para perder): minuto `86'` a `89'`, `diff == 1` y **`total_score == 1` (`1-0` o `0-1`, `Under 2.5 Goles` = `31G / 0P = 100.00% Win Rate`)**, cuota `<= 1.03`. Prohibido con `cushion == 1.5` en `2-0`/`0-2` (evita partidos rotos `0-2 -> 0-4` como `#357`).
   - Prohibido entrar en tiempo de descuento (`>= 90'`).
 - **Ganador (`1X2`) — Prioridad 95**:
   - Con `+2 goles` entre los minutos `75'` y `86'`, solo entran `Doble Oportunidad` o `Sin Empate (DNB)` (que protegen ante un `0-2 -> 2-2` como `#232`).
@@ -41,16 +41,17 @@
 
 ### 🎾 2. Tenis (`tennis`)
 - **Prohibido entrar en el 1er Set (`0-0` sets)** y **prohibido entrar en descansos entre sets (`has_active_set`)**.
-- **En el 2do Set (`1-0` o `0-1` sets, con colchón de 3er set)**:
+- **En el 2do Set (`1-0` o `0-1` sets, con colchón de 3er set — `93 Ganadas / 0 Perdidas = 100.00% Win Rate`)**:
   - El mismo jugador que ganó el 1er set debe liderar el 2do set con:
-    - **Ventaja de `>= 3` games (`4-0`, `4-1`, `5-2`, `5-1`, `5-0`)** — **`62 Ganadas / 0 Perdidas = 100.00% Win Rate`**, o
-    - **`5-3` en games (`game_diff == 2`) Y ventaja de puntos en el game actual (`has_game_pts_lead`: `30-0`, `30-15`, `40-0`, `40-15` o `AD`)**, bloqueando quiebres en `5-3 (0-0)` o `5-3 (0-15)` como `#236`.
+    - **`5-2`, `5-1`, `5-0` o `4-0`** (doble quiebre de ventaja), o
+    - **`4-1` siempre que el rival NO vaya `30`, `40` o `AD` arriba en su saque** (`trailer_g_pts in ["0", "15"]`), bloqueando `1-4 (30-0)` a punto de ser `2-4` (`#260`).
+    - **Prohibido `5-3` (`game_diff == 2`, 1 solo quiebre)**, eliminando remontadas como `#236` y `#299` (*Taylor Fritz vs Carlos Alcaraz*).
 - **En el 3er Set (`1-1` sets, muerte súbita sin colchón)**:
   - Bloqueados `5-3` y `5-2` (un solo quiebre).
   - Exige **doble quiebre de ventaja a 1 game del partido: `5-1` o `5-0`** (`cur_leader_games >= 5 and game_diff >= 4`).
 - **Liquidación Oficial anti-bug `0-0` y Detección de Retiros (`_extract_set_counts_from_periods`)**:
   - Calcula los sets completados (`(max(ph, pa) >= 6 and abs(ph - pa) >= 2) or max(ph, pa) >= 7`) directamente desde `periodScores`.
-  - Si un partido de Tenis finaliza con un set incompleto (`0 < max(ph, pa) < 6`, ej. `[6-7, 7-5, 2-1]` en `#238 Hurrion vs Zhao`), detecta **Retiro (`is_retired = True`)** y lo liquida oficialmente como **`PUSH / Reembolso (0.00 USDT, 1-1 Ret.)`**.
+  - Si un partido de Tenis finaliza con un set incompleto (`0 < max(ph, pa) < 6`, ej. `[6-7, 7-5, 2-1]` en `#238`, `#291`, `#293`), detecta **Retiro (`is_retired = True`)** y lo liquida oficialmente como **`PUSH / Reembolso (0.00 USDT)`**.
 
 ### 🏓 3. Ping Pong / Tenis de Mesa (`table-tennis`)
 - **Filtro Anti-Descanso (`has_active_set`)**:
@@ -58,7 +59,7 @@
 - **Con `2-0` en sets (`diff >= 2`, doble colchón de set)**:
   - Exige liderar el 3er set con **`>= 8` puntos y ventaja `>= +3` puntos** (`8-5`, `8-4`, `9-6`, `10-7`, etc.) — **`100.00% Win Rate`**.
 - **Con `2-1` en sets (`diff == 1`, 4to set)**:
-  - Exige **`>= 9` puntos y ventaja `>= +3`** (`9-6`, `9-5`, `10-7`) o **`>= 8` puntos y ventaja `>= +4`** (`8-4`, `8-3`, `8-2`), bloqueando remontadas de `8-5` en el 4to set — **`100.00% Win Rate`**.
+  - Bloqueados `8-4`, `8-5`, `9-6` y `10-7` (que sufrieron remontadas al 5to set en Kambi Cloud). Exige únicamente paliza extrema **`>= 10` puntos y ventaja `>= +5` (`10-5` o mejor)** — **`100.00% Win Rate`**.
 
 ### 🏐 4. Voleibol (`volleyball`)
 - **Filtro Anti-Descanso (`has_active_set`)**:

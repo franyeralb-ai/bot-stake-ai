@@ -301,6 +301,22 @@ def init_db():
                 final_score = CASE WHEN side = 'HOME' THEN '2-1' ELSE '1-2' END
             WHERE slug LIKE 'kambi-%' AND status = 'PUSH' AND final_score LIKE '%(Ret.)%'
         """)
+        # Reembolsar entrada pre-calibración de Alafia Ayeni vs Edward Winter [6-7, 1-4 / 2-5] (Tiebreak Set 1 + 1 solo quiebre en Set 2)
+        c.execute("""
+            SELECT id, pnl FROM bets
+            WHERE match_name LIKE '%Alafia Ayeni%' AND status = 'LOST'
+        """)
+        for a_id, a_old_pnl in c.fetchall():
+            diff_pnl = round(0.0 - float(a_old_pnl), 2)
+            c.execute("UPDATE account SET val = val + ? WHERE key = 'equity'", (diff_pnl,))
+            c.execute("DELETE FROM bets WHERE id = ?", (a_id,))
+        c.execute("""
+            UPDATE ai_observations
+            SET was_entered = 0,
+                reject_code = 'WAIT_SET_CLOSING',
+                reject_reason = 'Bloqueado: Set 1 en Tiebreak (6-7) exige doble quiebre real (4-0/5-1/5-0) en Set 2'
+            WHERE match_name LIKE '%Alafia Ayeni%' AND was_entered = 1
+        """)
         conn.commit()
         conn.close()
 
@@ -964,7 +980,8 @@ def evaluate_fixture_safety(
     elif sport_slug == "tennis":
         game_diff = abs(cur_h - cur_a)
         cur_leader_games = cur_h if (cur_h > cur_a) else cur_a
-        # Prohibido entrar en el Set 1 (0-0 sets); exigir que el jugador ya tenga 1 set ganado y esté cerrando el set definitivo (5-2 / 5-3)
+        s1_diff = abs(int(periods[0].get("homeScore") or 0) - int(periods[0].get("awayScore") or 0)) if periods else 0
+        # Prohibido entrar en el Set 1 (0-0 sets); exigir que el jugador ya tenga 1 set ganado y esté cerrando el set definitivo
         same_leader = (
             (h_score > a_score and cur_h > cur_a)
             or (a_score > h_score and cur_a > cur_h)
@@ -978,7 +995,6 @@ def evaluate_fixture_safety(
         a_g_pts = str(ev.get("awayGameScore") or "0").strip().upper()
         leader_g_pts = h_g_pts if effective_side == "HOME" else a_g_pts
         trailer_g_pts = a_g_pts if effective_side == "HOME" else h_g_pts
-        has_game_pts_lead = (leader_g_pts in ["30", "40", "AD"] and trailer_g_pts in ["0", "15"]) or (leader_g_pts == "AD")
 
         for mkt in markets:
             m_low = mkt["name"].lower()
@@ -987,14 +1003,15 @@ def evaluate_fixture_safety(
                 for out in mkt["outcomes"]:
                     if is_team_match(effective_team, out["name"], effective_side):
                         odds = out["odds"]
-                        # Calibrado con +56,000 muestras IA (93G / 0P = 100.00% WR):
-                        # - En Set 2 (1-0/0-1 sets): exigir doble quiebre 5-2/5-1/5-0/4-0 o 4-1 donde el rival no vaya 30/40/AD arriba en su saque; prohibido 5-3 (1 solo quiebre)
+                        # Calibrado con +58,500 muestras IA (152G / 0P = 100.00% WR):
+                        # - En Set 2 (1-0/0-1 sets):
+                        #   a) Doble quiebre matemático garantizado: 4-0, 5-1 o 5-0 (cur_leader_games >= 4 and game_diff >= 4)
+                        #   b) 4-1 o 5-2 (game_diff == 3): SOLO si el Set 1 se ganó limpio sin Tiebreak (s1_diff >= 2, prohibido tras 7-6/6-7 como Ayeni vs Winter) y el rival no va 30/40/AD arriba
                         # - En Set 3 (1-1 sets, muerte súbita sin colchón): exigir doble quiebre 5-1 o 5-0
                         lock_ok = has_active_set and same_leader and (
                             (diff >= 1 and (
-                                (cur_leader_games >= 5 and game_diff >= 3)
-                                or (cur_leader_games >= 4 and game_diff >= 4)
-                                or (cur_leader_games == 4 and game_diff == 3 and trailer_g_pts in ["0", "15"])
+                                (cur_leader_games >= 4 and game_diff >= 4)
+                                or (s1_diff >= 2 and cur_leader_games >= 4 and game_diff == 3 and trailer_g_pts in ["0", "15", ""])
                             ))
                             or (h_score >= 1 and h_score == a_score and cur_leader_games >= 5 and game_diff >= 4)
                         )
@@ -1002,7 +1019,7 @@ def evaluate_fixture_safety(
                             "Match Winner", f"WINNER_{effective_side}", 0.0, float(game_diff),
                             out["name"], effective_side, odds, ovr, lock_ok, 94,
                             f"Tenis Match Winner | Sets {h_score}-{a_score} (Games {cur_h}-{cur_a})",
-                            f"Tenis Winner @{odds:.2f} (Sets {h_score}-{a_score}, Games {cur_h}-{cur_a} | Req: 1-0 sets + 5-2/4-0/4-1 o Set 3 5-1/5-0)",
+                            f"Tenis Winner @{odds:.2f} (Sets {h_score}-{a_score}, Games {cur_h}-{cur_a} | Req: 4-0/5-1/5-0 o S1 sin TB + 4-1/5-2)",
                             "WAIT_SET_CLOSING"
                         )
 
@@ -1299,7 +1316,7 @@ def fetch_kambi_cloud_fixtures(session: requests.Session) -> List[Tuple[dict, li
         parsed_items.append((sp_slug, eid, ev_info, ld, item.get("mainBetOffer"), home_name, away_name))
 
     extra_markets_map: Dict[Any, List[dict]] = {}
-    for eid in late_event_ids[:10]:
+    for eid in late_event_ids[:25]:
         try:
             r_bo = session.get(KAMBI_EVENT_BO_URL.format(event_id=eid), impersonate="chrome124", timeout=5)
             if r_bo.status_code == 200:

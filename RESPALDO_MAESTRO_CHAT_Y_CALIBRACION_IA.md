@@ -41,10 +41,10 @@
 
 ### 🎾 2. Tenis (`tennis`)
 - **Prohibido entrar en el 1er Set (`0-0` sets)** y **prohibido entrar en descansos entre sets (`has_active_set`)**.
-- **En el 2do Set (`1-0` o `0-1` sets, con colchón de 3er set — `93 Ganadas / 0 Perdidas = 100.00% Win Rate`)**:
+- **En el 2do Set (`1-0` o `0-1` sets, con colchón de 3er set — `83 Ganadas / 0 Perdidas = 100.00% Win Rate` en +58,500 muestras)**:
   - El mismo jugador que ganó el 1er set debe liderar el 2do set con:
-    - **`5-2`, `5-1`, `5-0` o `4-0`** (doble quiebre de ventaja), o
-    - **`4-1` siempre que el rival NO vaya `30`, `40` o `AD` arriba en su saque** (`trailer_g_pts in ["0", "15"]`), bloqueando `1-4 (30-0)` a punto de ser `2-4` (`#260`).
+    - **`4-0`, `5-1` o `5-0` (`game_diff >= 4`)**: doble quiebre matemático garantizado sin importar el marcador del 1er set.
+    - **`4-1` o `5-2` (`game_diff == 3`)**: **SOLO si el 1er Set se ganó con quiebre limpio sin Tiebreak (`s1_diff >= 2`: `6-0`, `6-1`, `6-2`, `6-3`, `6-4` o `7-5`)** y **el rival NO va `30`, `40` o `AD` arriba en el game actual** (`trailer_g_pts in ["0", "15", ""]`), bloqueando `6-7, 1-4` y `6-7, 2-5 (15-0)` tras Tiebreak parejo (*Alafia Ayeni vs Edward Winter*).
     - **Prohibido `5-3` (`game_diff == 2`, 1 solo quiebre)**, eliminando remontadas como `#236` y `#299` (*Taylor Fritz vs Carlos Alcaraz*).
 - **En el 3er Set (`1-1` sets, muerte súbita sin colchón)**:
   - Bloqueados `5-3` y `5-2` (un solo quiebre).

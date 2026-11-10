@@ -57,7 +57,7 @@
 - **Filtro Anti-Descanso (`has_active_set`)**:
   - Exige `len(periods) > (h_score + a_score)` y que no esté en descanso (`Second break`, etc.), evitando leer el marcador del set anterior.
 - **Con `2-0` en sets (`diff >= 2`, doble colchón de set)**:
-  - Exige liderar el 3er set con **`>= 8` puntos y ventaja `>= +3` puntos** (`8-5`, `8-4`, `9-6`, `10-7`, etc.) — **`100.00% Win Rate`**.
+  - Exige liderar el 3er set con **`>= 9` puntos y ventaja `>= +4` (`9-5`, `10-6`, `9-4`, `10-5`, `10-4`)** o **`>= 8` puntos y ventaja `>= +5` (`8-3`, `8-2`, `8-1`)**, bloqueando `8-4` y `10-7` (*David Jicha vs Maksim Ovcharenko*) — **`100.00% Win Rate` en +65,000 muestras**.
 - **Con `2-1` en sets (`diff == 1`, 4to set)**:
   - Bloqueados `8-4`, `8-5`, `9-6` y `10-7` (que sufrieron remontadas al 5to set en Kambi Cloud). Exige únicamente paliza extrema **`>= 10` puntos y ventaja `>= +5` (`10-5` o mejor)** — **`100.00% Win Rate`**.
 

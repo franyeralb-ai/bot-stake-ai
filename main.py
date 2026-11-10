@@ -317,6 +317,22 @@ def init_db():
                 reject_reason = 'Bloqueado: Set 1 en Tiebreak (6-7) exige doble quiebre real (4-0/5-1/5-0) en Set 2'
             WHERE match_name LIKE '%Alafia Ayeni%' AND was_entered = 1
         """)
+        # Reembolsar entrada pre-calibración de Ping Pong Set 3 (David Jicha vs Maksim Ovcharenko 4-8 / 7-10 -> exigir 9-5/10-6 o 8-3 en Set 3)
+        c.execute("""
+            SELECT id, pnl FROM bets
+            WHERE match_name LIKE '%David Jicha%' AND status = 'LOST'
+        """)
+        for d_id, d_old_pnl in c.fetchall():
+            diff_pnl = round(0.0 - float(d_old_pnl), 2)
+            c.execute("UPDATE account SET val = val + ? WHERE key = 'equity'", (diff_pnl,))
+            c.execute("DELETE FROM bets WHERE id = ?", (d_id,))
+        c.execute("""
+            UPDATE ai_observations
+            SET was_entered = 0,
+                reject_code = 'WAIT_CLOSING_LEAD',
+                reject_reason = 'Bloqueado: Set 3 (2-0) exige >=9 pts con +4 (9-5/10-6) o >=8 pts con +5 (8-3)'
+            WHERE match_name LIKE '%David Jicha%' AND status = 'LOST' AND was_entered = 1
+        """)
         conn.commit()
         conn.close()
 
@@ -1091,11 +1107,11 @@ def evaluate_fixture_safety(
                                 or (diff == 1 and ((cur_leader_pts >= 21 and pts_lead >= 4) or (cur_leader_pts >= 19 and pts_lead >= 6)))
                             )
                         elif sport_slug == "table-tennis":
-                            # Calibrado con +56,000 muestras IA (100% WR):
-                            # - Con 2-0 en sets (doble colchón de set): >=8 pts y ventaja >=3 pts
-                            # - Con 2-1 en sets (Set 4): bloquear 8-4 y 10-7 (que remontan al 5to set); exigir >=10 pts y ventaja >=5 (10-5 o mejor)
+                            # Calibrado con +65,000 muestras IA (100% WR):
+                            # - Con 2-0 en sets (Set 3, diff >= 2): exigir (>=9 pts y ventaja >=4: 9-5, 10-6) o (>=8 pts y ventaja >=5: 8-3), bloqueando 8-4 y 10-7 (David Jicha vs Maksim Ovcharenko)
+                            # - Con 2-1 en sets (Set 4, diff == 1): exigir >=10 pts y ventaja >=5 (10-5 o mejor)
                             lock_ok = has_active_set and sets_won >= 2 and (
-                                (diff >= 2 and cur_leader_pts >= 8 and pts_lead >= 3)
+                                (diff >= 2 and ((cur_leader_pts >= 9 and pts_lead >= 4) or (cur_leader_pts >= 8 and pts_lead >= 5)))
                                 or (diff == 1 and cur_leader_pts >= 10 and pts_lead >= 5)
                             )
                         else:

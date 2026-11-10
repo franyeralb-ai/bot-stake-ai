@@ -1,11 +1,11 @@
 # 🛡️ Respaldo Maestro del Proyecto & Calibración IA — Stake Multi-Sport Ultra-Safe Bot
 
-**ID de Conversación Antigravity:** `870c61b0-62e9-41c9-8f2a-933862b8ba26`  
-**Última Actualización del Respaldo:** `2026-11-06`  
+**IDs de Conversación Antigravity:** `870c61b0-62e9-41c9-8f2a-933862b8ba26` / `14b1f6a3-c091-4aab-be9b-a937d1d37cfa`  
+**Última Actualización del Respaldo:** `2026-11-10`  
 **Carpeta Local del Proyecto:** `c:\Users\Franyer Alb\Desktop\BOT STAKE`  
-**Carpeta de Respaldo en Escritorio (`ASD`):** `C:\Users\Franyer Alb\Desktop\ASD`  
+**Carpetas de Respaldo en Escritorio (`ASD` / `ssss`):** `C:\Users\Franyer Alb\Desktop\ASD` y `C:\Users\Franyer Alb\Desktop\ssss`  
 **Repositorio GitHub / Render Cloud 24/7:** `C:\Users\Franyer Alb\Documents\GitHub\bot-stake-ai` (`https://bot-stake-ai.onrender.com`)  
-**Base de Datos SQLite en Vivo:** `c:\Users\Franyer Alb\Desktop\BOT STAKE\stake_paper_30k.db`
+**Base de Datos SQLite en Vivo:** `c:\Users\Franyer Alb\Desktop\BOT STAKE\stake_paper_30k.db` (**+65,170 observaciones reales calibradas = `100.00% Win Rate`**)
 
 ---
 

@@ -2790,6 +2790,12 @@ c:\Users\Franyer Alb\Downloads\stake_ai_dataset_full (9).csv
 
 
 ---
+
+
+---
+
+
+---
 # 🔄 Continuación del Historial & Calibración IA (Sesión `14b1f6a3-c091-4aab-be9b-a937d1d37cfa` — 2026-11-08 a 2026-11-10)
 
 ### 👤 Usuario (2026-11-09T03:31:42Z)
@@ -3188,5 +3194,96 @@ guarda este chat para no perderlo nunca
 </USER_REQUEST>
 <ADDITIONAL_METADATA>
 The current local time is: 2026-11-10T00:09:44-04:00.
+</ADDITIONAL_METADATA>
+
+### 🤖 Antigravity (2026-11-10T04:11:37Z)
+
+He guardado el respaldo permanente e íntegro de este chat (incluyendo el historial anterior + toda esta sesión, las calibraciones sobre **65,170 observaciones** y el código actualizado) en **5 ubicaciones simultáneas** para que nunca se pierda:
+
+1. **En tu carpeta principal del proyecto (`Desktop\BOT STAKE`)**:
+   - [`RESPALDO_MAESTRO_CHAT_Y_CALIBRACION_IA.md`](file:///C:/Users/Franyer%20Alb/Desktop/BOT%20STAKE/RESPALDO_MAESTRO_CHAT_Y_CALIBRACION_IA.md)
+   - [`HISTORIAL_COMPLETO_CONVERSACION.md`](file:///C:/Users/Franyer%20Alb/Desktop/BOT%20STAKE/HISTORIAL_COMPLETO_CONVERSACION.md) (`164 KB` con toda la conversación completa)
+   - [`transcript_14b1f6a3_2026-11-10.jsonl`](file:///C:/Users/Franyer%20Alb/Desktop/BOT%20STAKE/transcript_14b1f6a3_2026-11-10.jsonl) (transcripción original íntegra)
+2. **En la subcarpeta de respaldo (`Desktop\BOT STAKE\historial_chat_respaldo`)**:
+   - [`HISTORIAL_COMPLETO_CONVERSACION.md`](file:///C:/Users/Franyer%20Alb/Desktop/BOT%20STAKE/historial_chat_respaldo/HISTORIAL_COMPLETO_CONVERSACION.md)
+   - [`RESPALDO_MAESTRO_CHAT_Y_CALIBRACION_IA.md`](file:///C:/Users/Franyer%20Alb/Desktop/BOT%20STAKE/historial_chat_respaldo/RESPALDO_MAESTRO_CHAT_Y_CALIBRACION_IA.md)
+3. **En tus carpetas del Escritorio (`Desktop\ASD` y `Desktop\ssss`)**:
+   - [`C:\Users\Franyer Alb\Desktop\ASD\HISTORIAL_COMPLETO_CONVERSACION.md`](file:///C:/Users/Franyer%20Alb/Desktop/ASD/HISTORIAL_COMPLETO_CONVERSACION.md)
+   - [`C:\Users\Franyer Alb\Desktop\ssss\HISTORIAL_COMPLETO_CONVERSACION.md`](file:///C:/Users/Franyer%20Alb/Desktop/ssss/HISTORIAL_COMPLETO_CONVERSACION.md)
+   - [`C:\Users\Franyer Alb\Desktop\ssss\RESPALDO_MAESTRO_CHAT_Y_CALIBRACION_IA.md`](file:///C:/Users/Franyer%20Alb/Desktop/ssss/RESPALDO_MAESTRO_CHAT_Y_CALIBRACION_IA.md)
+4. **En tu repositorio Git (`Documents\GitHub\bot-stake-ai`)**:
+   - [`RESPALDO_MAESTRO_CHAT_Y_CALIBRACION_IA.md`](file:///c:/Users/Franyer%20Alb/Documents/GitHub/bot-stake-ai/RESPALDO_MAESTRO_CHAT_Y_CALIBRACION_IA.md)
+   - [`HISTORIAL_COMPLETO_CONVERSACION.md`](file:///c:/Users/Franyer%20Alb/Documents/GitHub/bot-stake-ai/HISTORIAL_COMPLETO_CONVERSACION.md) (commiteado en la rama `main`: commit `90cabc8`).
+5. **En el Artefacto de Antigravity**:
+   - [`RESPALDO_MAESTRO_CHAT_Y_CALIBRACION_IA.md`](file:///C:/Users/Franyer%20Alb/.gemini/antigravity/brain/14b1f6a3-c091-4aab-be9b-a937d1d37cfa/RESPALDO_MAESTRO_CHAT_Y_CALIBRACION_IA.md)
+
+### 👤 Usuario (2026-11-11T00:55:51Z)
+
+<USER_REQUEST>
+C:\Users\Franyer Alb\Desktop\ssss
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-11-10T20:55:51-04:00.
+</ADDITIONAL_METADATA>
+
+### 🤖 Antigravity (2026-11-11T00:57:10Z)
+
+He analizado al 100% los nuevos archivos en **`C:\Users\Franyer Alb\Desktop\ssss`** (`stake_ai_dataset_full (14).csv` con **8,668 observaciones** y `stake_ai_dataset_full (14).json` con las últimas **5,000**), correspondientes a la nueva ejecución en vivo tras desplegar nuestras últimas modificaciones en Render.
+
+---
+
+### 1. Resultado en Vivo con las Modificaciones Activas: **100.00% de Victoria (`24 Ganadas / 0 Perdidas`)**
+
+| Métrica | JSON (14) *(Últimas 5,000)* | CSV Completo (14) *(8,668 filas)* |
+| :--- | :---: | :---: |
+| **Observaciones Totales Capturadas** | `5,000` | `8,668` |
+| **Entradas Ejecutadas (`was_entered = 1`)** | **10 Ganadas / 0 Perdidas** | **24 Ganadas / 0 Perdidas** *(+1 en curso)* |
+| **Win Rate Real en Producción** | **100.00% (`0` derrotas)** | **100.00% (`0` derrotas)** |
+| **Derrotas Totales Evitadas en Sombra (`LOST`)** | **844 derrotas evitadas** | **1,399 derrotas evitadas** |
+| **Derrotas a Cuota `<= 1.05` Evitadas en Sombra** | **25 remontadas mortales** | **38 remontadas mortales** |
+
+---
+
+### 2. Desglose por Deporte de las 24 Entradas Ganadas (`0` Perdidas)
+
+1. **🎾 Tenis (`13 Ganadas / 0 Perdidas = 100.00% Win Rate`)**:
+   - **El nuevo filtro de Tiebreak funcionó exactamente como se diseñó**:
+     - En `Ole Bredschneijder vs Nicolas Ulrich` (`ID 16666`), como el 1er Set terminó en Tiebreak (`7-6`), el bot **no entró en `4-1`** sino que esperó al doble quiebre garantizado **`[7-6, 4-0]` (`@1.01`)** y ganó `2-0`.
+     - En los partidos donde el 1er Set se ganó sin Tiebreak (`6-1`, `6-2`, `6-3`, `6-4`, `7-5`), entró limpio en `4-1` / `4-0` y ganó todos (`Coco Gauff vs Linda Noskova [3-6, 1-4] @1.05 -> 0-2`, `Sammie Schouten [6-2, 4-1] @1.03 -> 2-0`, `Alastair Gray vs Darwin Blanch [6-2, 4-1] @1.03 -> 2-0`, `Ilija Palavestra [7-5, 4-1] @1.01 -> 2-0`, `Luca Connaughton [6-1, 4-1] @1.01 -> 2-0`, etc.).
+2. **⚽ Fútbol (`4 Ganadas / 0 Perdidas = 100.00% Win Rate`)**:
+   - Ganó `Crawley Town vs Brentford U21` (`Doble Oportunidad X2 @1.01` al min `75'` con `0-2` y `1X2 @1.02` al `90'` $\rightarrow$ final `1-2`), `CF America vs Atlante FC` (`6-0`) y `Atlanta United vs Toronto` (`3-1`).
+3. **🏓 Ping Pong (`3 Ganadas / 0 Perdidas = 100.00% Win Rate`)**:
+   - Con la nueva regla del 3er Set (`>=9 pts con +4` o `>=8 pts con +5`), solo entró en cierres aplastantes y ganó el 100%:
+     - `Ondrej Kus vs Tomas Ogrocki`: `Set 3 [7-11, 8-11, 3-8]` (`@1.01`) $\rightarrow$ `0-3`.
+     - `Jiri Cerny vs Jiri Volek`: `Set 3 [11-9, 11-8, 9-5]` (`@1.01`) $\rightarrow$ `3-0`.
+     - `Josef Vintr vs Jaroslav Brynych`: `Set 3 [11-8, 11-8, 8-3]` (`@1.01`) $\rightarrow$ `3-0`.
+4. **🏐 Voleibol (`2 Ganadas / 0 Perdidas = 100.00% Win Rate`)**:
+   - `Al Sadd vs Al Ahli VB`: `Set 4 [25-20, 25-14, 20-25, 22-17]` (`@1.01`) y `[23-19]` (`@1.02`) $\rightarrow$ `3-1`.
+5. **🏈 Fútbol Americano (`1G / 0P = 100%`)** y **🏒 Hockey (`1G / 0P = 100%`)**:
+   - `LA Rams vs LA Chargers` (`24-9 @1.01`) e `Indy Fuel vs Fort Wayne Komets` (`4-3 @1.02`).
+
+---
+
+### 3. Remontadas Mortales a Cuota `@1.01 - @1.05` que las Reglas Salvaron en Vivo (`38` en total)
+
+- **🎾 Tenis (`7` salvadas a cuota `@1.01 - @1.05`)**:
+  - `Aleksandra Kyselova vs Katelynn Kock`: Iba `Set 2 [6-1, 5-3]` a cuota **`@1.01`** (`ID 120121`) y `[6-1, 5-4]` a **`@1.03`** (`ID 123370`) y **perdió `1-2`**. ¡Bloqueada por la prohibición de `5-3` (1 solo quiebre)!
+  - `Daniel Rincon vs Santiago de la Fuente`: Iba en el **3er Set** `[6-7, 6-3, 4-1] (15-30)` a cuota **`@1.01`** (`ID 59880`), `4-2 @1.04` y `5-4 @1.05` y **perdió `1-2`**. ¡Bloqueada por la regla de exigir `5-1` o `5-0` en el 3er Set decisivo!
+- **🏓 Ping Pong (`27` salvadas a cuota `@1.01 - @1.05`)**:
+  - `Michal Kolbusovsky vs Martin Dvorak`: Iba `0-2 sets [6-8] @1.01` (`ID 87115`) y `[10-9] @1.05` (`ID 87591`) y **perdió `3-2`**.
+  - `Dominik Solilo vs Jakub Zochniak`: Iba `1-2 sets [5-8] @1.01` (`ID 16212`) en el 4to set y **perdió `3-2`**.
+  - `Daniel Branny vs Tomas Ogrocki`: Iba `2-0 sets [10-9] @1.03` (`ID 127224`) y **perdió `2-3`**.
+- **🏀 Baloncesto y ⚽ Fútbol (`4` salvadas a cuota `@1.03 - @1.04`)**:
+  - `Maccabi Kiryat Gat vs Hapoel Haifa` (`Q4 04:41, 65-70 @1.03` $\rightarrow$ `80-79`), `Mansfield Town vs Chesterfield` (`Doble Oportunidad 1X @1.04` en `3-2` $\rightarrow$ `3-5`), `Burton Albion vs Notts County` (`Under 3.5 @1.04` en `0-1` $\rightarrow$ `1-3`).
+
+*(Además, he vuelto a guardar en `C:\Users\Franyer Alb\Desktop\ssss`, `Desktop\BOT STAKE` y `Desktop\ASD` los archivos `HISTORIAL_COMPLETO_CONVERSACION.md` y `RESPALDO_MAESTRO_CHAT_Y_CALIBRACION_IA.md` para que no se borren al descargar nuevos datasets).*
+
+### 👤 Usuario (2026-11-12T01:34:35Z)
+
+<USER_REQUEST>
+C:\Users\Franyer Alb\Desktop\ssss
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-11-11T21:34:35-04:00.
 </ADDITIONAL_METADATA>
 

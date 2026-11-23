@@ -365,6 +365,18 @@ def init_db():
                 reject_reason = 'Bloqueado: +14 a +20 pts en Q4 exige reloj restante <= 8:00 min (restaban 14:07)'
             WHERE match_name LIKE '%Jacksonville State%' AND status = 'LOST' AND was_entered = 1
         """)
+        # Limpiar apuestas huérfanas del snapshot inicial del Día 1 (Iowa Wild, Indy Fuel, Mayo Aidan congelado y simulaciones)
+        c.execute("""
+            SELECT id, pnl FROM bets
+            WHERE match_name LIKE '%Iowa Wild%'
+               OR match_name LIKE '%Indy Fuel%'
+               OR match_name LIKE '%Mayo, Aidan%'
+               OR match_name LIKE '%Real Madrid vs Getafe (Simulación)%'
+        """)
+        for old_id, old_pnl in c.fetchall():
+            diff_pnl = round(0.0 - float(old_pnl or 0.0), 2)
+            c.execute("UPDATE account SET val = val + ? WHERE key = 'equity'", (diff_pnl,))
+            c.execute("DELETE FROM bets WHERE id = ?", (old_id,))
         conn.commit()
         conn.close()
 

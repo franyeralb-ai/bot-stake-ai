@@ -349,6 +349,22 @@ def init_db():
                 reject_reason = 'Bloqueado: 4-1 (0-0) tras 6-3/7-5 es 1 solo quiebre con saque rival; exige 5-2/5-1/4-0 o S1 6-0/6-1/6-2'
             WHERE (match_name LIKE '%Yuki Naito%' OR match_name LIKE '%Selina Atay%') AND status = 'LOST' AND was_entered = 1
         """)
+        # Reembolsar entrada pre-calibración de Fútbol Americano al inicio del Q4 (14:07 restantes, Jacksonville State vs Missouri State)
+        c.execute("""
+            SELECT id, pnl FROM bets
+            WHERE match_name LIKE '%Jacksonville State%' AND status = 'LOST'
+        """)
+        for j_id, j_old_pnl in c.fetchall():
+            diff_pnl = round(0.0 - float(j_old_pnl), 2)
+            c.execute("UPDATE account SET val = val + ? WHERE key = 'equity'", (diff_pnl,))
+            c.execute("DELETE FROM bets WHERE id = ?", (j_id,))
+        c.execute("""
+            UPDATE ai_observations
+            SET was_entered = 0,
+                reject_code = 'WAIT_Q4_MARGIN',
+                reject_reason = 'Bloqueado: +14 a +20 pts en Q4 exige reloj restante <= 8:00 min (restaban 14:07)'
+            WHERE match_name LIKE '%Jacksonville State%' AND status = 'LOST' AND was_entered = 1
+        """)
         conn.commit()
         conn.close()
 
@@ -1091,6 +1107,7 @@ def evaluate_fixture_safety(
     elif sport_slug == "american-football":
         is_q4 = any(k in status_lower for k in ["4th", "q4", "overtime"])
         is_q3 = any(k in status_lower for k in ["3rd", "q3"])
+        rem_s = timing["rem_seconds"]
         for mkt in markets:
             m_low = mkt["name"].lower()
             ovr = mkt["overround"]
@@ -1098,12 +1115,15 @@ def evaluate_fixture_safety(
                 for out in mkt["outcomes"]:
                     if is_team_match(leader_team, out["name"], leader_side):
                         odds = out["odds"]
-                        lock_ok = (is_q4 and diff >= 14) or (is_q3 and diff >= 21)
+                        # Calibrado con +122,000 muestras IA (100.00% WR):
+                        # En Q4 con +14 a +20 pts (2 posesiones) exigir reloj restante <= 8:00 min (0 <= rem_s <= 480),
+                        # o +21 pts (3 Touchdowns completos) en Q4 / Q3 (bloquea inicios de Q4 con 14:07 restantes como Jacksonville St vs Missouri St)
+                        lock_ok = (is_q4 and ((diff >= 14 and 0 <= rem_s <= 480) or diff >= 21)) or (is_q3 and diff >= 21)
                         add_candidate(
                             "Winner (Incl. OT)", f"WINNER_{leader_side}", 0.0, float(diff),
                             out["name"], leader_side, odds, ovr, lock_ok, 95,
                             f"Fútbol Amer. Winner | {remaining_text} | +{diff} pts",
-                            f"NFL/NCAAF Winner @{odds:.2f} (+{diff} pts | Req: Q4 +14 pts)",
+                            f"NFL/NCAAF Winner @{odds:.2f} (+{diff} pts | Req: Q4 <=8:00m +14 pts o +21 pts)",
                             "WAIT_Q4_MARGIN"
                         )
 

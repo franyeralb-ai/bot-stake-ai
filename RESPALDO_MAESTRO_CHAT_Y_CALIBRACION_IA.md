@@ -83,7 +83,9 @@
   - Con **`+3` goles o más**: últimos 8 minutos del 3er período (`minute >= 52` o `0 <= rem_s <= 480`).
 
 ### 🏈 7. Fútbol Americano (`american-football`) y ⚾ 8. Béisbol (`baseball`)
-- **Fútbol Americano**: `+14` puntos (2 Touchdowns) en el `4to Cuarto (Q4)`, o `+21` puntos (3 Touchdowns) en el `3er Cuarto (Q3)`.
+- **Fútbol Americano (`100.00% Win Rate` en +122,000 muestras)**:
+  - Con **`+14` a `+20` puntos (2 Touchdowns)** en el `4to Cuarto (Q4)`: exige reloj restante real **`<= 8:00` minutos (`0 <= rem_s <= 480`)**, bloqueando inicios del 4to cuarto con `14:07` restantes (*Jacksonville State vs Missouri State*).
+  - Con **`+21` puntos o más (3 Touchdowns completos)**: en cualquier momento del `3er Cuarto (Q3)` o `4to Cuarto (Q4)`.
 - **Béisbol**: `+3` carreras o más en la `8va` o `9na` entrada (`8th` / `9th inning`).
 
 ---

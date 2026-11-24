@@ -57,10 +57,13 @@
 ### 🏓 3. Ping Pong / Tenis de Mesa (`table-tennis`)
 - **Filtro Anti-Descanso (`has_active_set`)**:
   - Exige `len(periods) > (h_score + a_score)` y que no esté en descanso (`Second break`, etc.), evitando leer el marcador del set anterior.
-- **Con `2-0` en sets (`diff >= 2`, doble colchón de set)**:
-  - Exige liderar el 3er set con **`>= 9` puntos y ventaja `>= +4` (`9-5`, `10-6`, `9-4`, `10-5`, `10-4`)** o **`>= 8` puntos y ventaja `>= +5` (`8-3`, `8-2`, `8-1`)**, bloqueando `8-4` y `10-7` (*David Jicha vs Maksim Ovcharenko*) — **`100.00% Win Rate` en +65,000 muestras**.
-- **Con `2-1` en sets (`diff == 1`, 4to set)**:
-  - Bloqueados `8-4`, `8-5`, `9-6` y `10-7` (que sufrieron remontadas al 5to set en Kambi Cloud). Exige únicamente paliza extrema **`>= 10` puntos y ventaja `>= +5` (`10-5` o mejor)** — **`100.00% Win Rate`**.
+- **Filtro Automático Best-of-7 vs Best-of-5 (`min_sets_to_close`)**:
+  - En torneos **Best-of-7 (a 4 sets ganados: `Poland - Masters`, `WTT Star Contender`, `Champions`, `Grand Smash`)**, exige **`sets_won >= 3`** (`3-0`, `3-1` o `3-2` en sets), bloqueando entradas prematuras en el Set 3 con `2-0` (*Norbert Plachta vs Piotr Strojwas*).
+  - En torneos **Best-of-5 (a 3 sets ganados: `TT Elite Series`, `Czech Liga Pro`, `TT Cup`)**, exige **`sets_won >= 2`**.
+- **Con doble colchón de set (`diff >= 2`, ej. `2-0` en BO5 o `3-0`/`3-1` en BO7)**:
+  - Exige liderar el set de cierre con **`>= 9` puntos y ventaja `>= +4` (`9-5`, `10-6`, `9-4`, `10-5`, `10-4`)** o **`>= 8` puntos y ventaja `>= +5` (`8-3`, `8-2`, `8-1`)**, bloqueando `8-4` y `10-7` (*David Jicha vs Maksim Ovcharenko*) — **`100.00% Win Rate` en +136,000 muestras**.
+- **Con 1 set de ventaja en el set de cierre (`diff == 1`, ej. `2-1` en BO5 o `3-2` en BO7)**:
+  - Bloqueados `8-4`, `8-5`, `9-6` y `10-7` (que sufrieron remontadas al último set). Exige únicamente paliza extrema **`>= 10` puntos y ventaja `>= +5` (`10-5` o mejor)** — **`100.00% Win Rate`**.
 
 ### 🏐 4. Voleibol (`volleyball`)
 - **Filtro Anti-Descanso (`has_active_set`)**:

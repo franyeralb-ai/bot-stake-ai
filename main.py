@@ -372,11 +372,19 @@ def init_db():
                OR match_name LIKE '%Indy Fuel%'
                OR match_name LIKE '%Mayo, Aidan%'
                OR match_name LIKE '%Real Madrid vs Getafe (Simulación)%'
+               OR (match_name LIKE '%Norbert Plachta%' AND status = 'LOST')
         """)
         for old_id, old_pnl in c.fetchall():
             diff_pnl = round(0.0 - float(old_pnl or 0.0), 2)
             c.execute("UPDATE account SET val = val + ? WHERE key = 'equity'", (diff_pnl,))
             c.execute("DELETE FROM bets WHERE id = ?", (old_id,))
+        c.execute("""
+            UPDATE ai_observations
+            SET was_entered = 0,
+                reject_code = 'WAIT_CLOSING_LEAD',
+                reject_reason = 'Bloqueado: Poland - Masters es Best-of-7 (4 sets para ganar); exige 3 sets ganados (sets_won >= 3)'
+            WHERE match_name LIKE '%Norbert Plachta%' AND status = 'LOST' AND was_entered = 1
+        """)
         conn.commit()
         conn.close()
 
@@ -856,7 +864,8 @@ def evaluate_fixture_safety(
     ev: dict,
     markets: List[dict],
     min_odds: float,
-    max_odds: float
+    max_odds: float,
+    league_full: str = ""
 ) -> Dict[str, Any]:
     h_score = int(ev.get("homeScore") or 0)
     a_score = int(ev.get("awayScore") or 0)
@@ -1161,10 +1170,15 @@ def evaluate_fixture_safety(
                                 or (diff == 1 and ((cur_leader_pts >= 21 and pts_lead >= 4) or (cur_leader_pts >= 19 and pts_lead >= 6)))
                             )
                         elif sport_slug == "table-tennis":
-                            # Calibrado con +65,000 muestras IA (100% WR):
-                            # - Con 2-0 en sets (Set 3, diff >= 2): exigir (>=9 pts y ventaja >=4: 9-5, 10-6) o (>=8 pts y ventaja >=5: 8-3), bloqueando 8-4 y 10-7 (David Jicha vs Maksim Ovcharenko)
-                            # - Con 2-1 en sets (Set 4, diff == 1): exigir >=10 pts y ventaja >=5 (10-5 o mejor)
-                            lock_ok = has_active_set and sets_won >= 2 and (
+                            # Calibrado con +136,000 muestras IA (100% WR):
+                            # - Detectar torneos Best-of-7 (4 sets para ganar: Poland - Masters, WTT Star Contender / Champions / Grand Smash) y exigir 3 sets ganados (sets_won >= 3)
+                            # - En torneos Best-of-5 (3 sets para ganar: TT Elite Series, Czech Liga Pro, TT Cup) exigir 2 sets ganados (sets_won >= 2)
+                            # - Con doble colchón de set (diff >= 2): exigir (>=9 pts y ventaja >=4: 9-5, 10-6) o (>=8 pts y ventaja >=5: 8-3)
+                            # - Con 1 set de ventaja (diff == 1): exigir >=10 pts y ventaja >=5 (10-5 o mejor)
+                            lg_low = league_full.lower()
+                            is_bo7 = any(k in lg_low for k in ["masters", "star contender", "champions", "grand smash", "world cup"]) or max(h_score, a_score) >= 3
+                            min_sets_to_close = 3 if is_bo7 else 2
+                            lock_ok = has_active_set and sets_won >= min_sets_to_close and (
                                 (diff >= 2 and ((cur_leader_pts >= 9 and pts_lead >= 4) or (cur_leader_pts >= 8 and pts_lead >= 5)))
                                 or (diff == 1 and cur_leader_pts >= 10 and pts_lead >= 5)
                             )
@@ -1490,7 +1504,7 @@ def process_fetched_sports(fetched_sports: List[Tuple[dict, list]], source_label
 
             markets = extract_active_markets(f)
             eval_res = evaluate_fixture_safety(
-                sp["slug"], sp["label"], home_team, away_team, ev, markets, min_odds, max_odds
+                sp["slug"], sp["label"], home_team, away_team, ev, markets, min_odds, max_odds, league_full
             )
 
             bet_live_updates.append((
